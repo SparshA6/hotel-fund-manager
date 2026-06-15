@@ -47,7 +47,7 @@ function writeLocalBookings(bookings) {
   }
 }
 
-// Connect to MongoDB
+// Connect to MongoDB Atlas
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB successfully at:', MONGODB_URI);
