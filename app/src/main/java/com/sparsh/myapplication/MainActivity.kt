@@ -130,6 +130,7 @@ class MainActivity : ComponentActivity() {
                                         isLoading = false
                                     }
                                 },
+                                isRefreshing = isLoading,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
