@@ -50,7 +50,7 @@ data class Booking(
     val timestamp: Long = System.currentTimeMillis()
 ) {
     val amountCharged: Double
-        get() = if (isBillOn) billAmount else (items.sumOf { it.amount } + dormTotalAmount)
+        get() = if (isBillOn) billAmount else (items.filter { it.category == "Room" }.sumOf { it.amount } + dormTotalAmount)
 
     fun toJsonObject(): JSONObject {
         val json = JSONObject()
