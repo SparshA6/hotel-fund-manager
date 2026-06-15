@@ -106,7 +106,6 @@ class BookingRepository(context: Context) {
     }
 
     companion object {
-        // Connected phone needs the host computer's IP address on the Wi-Fi network.
-        private const val BASE_URL = "http://10.72.25.41:5000/"
+        private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
     }
 }

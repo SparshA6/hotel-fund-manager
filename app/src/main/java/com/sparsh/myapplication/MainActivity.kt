@@ -44,10 +44,12 @@ class MainActivity : ComponentActivity() {
                 val coroutineScope = rememberCoroutineScope()
                 var isLoading by remember { mutableStateOf(true) }
 
-                LaunchedEffect(Unit) {
-                    isLoading = true
-                    bookings.value = bookingRepository.getBookings()
-                    isLoading = false
+                LaunchedEffect(currentTab) {
+                    if (currentTab == 0) {
+                        isLoading = true
+                        bookings.value = bookingRepository.getBookings()
+                        isLoading = false
+                    }
                 }
 
                 var isAddBookingInitialized by remember { mutableStateOf(false) }
@@ -119,6 +121,13 @@ class MainActivity : ComponentActivity() {
                                     coroutineScope.launch {
                                         bookingRepository.deleteBooking(id)
                                         bookings.value = bookingRepository.getBookings()
+                                    }
+                                },
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        isLoading = true
+                                        bookings.value = bookingRepository.getBookings()
+                                        isLoading = false
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()
