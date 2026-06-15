@@ -104,15 +104,7 @@ fun DashboardScreen(
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = Color.Transparent
-            ),
-            actions = {
-                IconButton(onClick = onRefresh) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh Bookings"
-                    )
-                }
-            }
+            )
         )
 
         Box(

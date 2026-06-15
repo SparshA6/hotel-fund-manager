@@ -24,6 +24,7 @@ import com.sparsh.myapplication.ui.SearchScreen
 import com.sparsh.myapplication.ui.QuickBookDialog
 import com.sparsh.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private lateinit var bookingRepository: BookingRepository
@@ -126,7 +127,9 @@ class MainActivity : ComponentActivity() {
                                 onRefresh = {
                                     coroutineScope.launch {
                                         isLoading = true
+                                        val delayJob = launch { delay(1000) }
                                         bookings.value = bookingRepository.getBookings()
+                                        delayJob.join()
                                         isLoading = false
                                     }
                                 },
