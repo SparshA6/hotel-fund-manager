@@ -125,15 +125,12 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 onRefresh = {
-                                    coroutineScope.launch {
-                                        isLoading = true
-                                        val delayJob = launch { delay(1000) }
-                                        bookings.value = bookingRepository.getBookings()
-                                        delayJob.join()
-                                        isLoading = false
-                                    }
+                                    isLoading = true
+                                    val delayJob = coroutineScope.launch { delay(1000) }
+                                    bookings.value = bookingRepository.getBookings()
+                                    delayJob.join()
+                                    isLoading = false
                                 },
-                                isRefreshing = isLoading,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

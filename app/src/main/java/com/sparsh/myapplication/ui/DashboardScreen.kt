@@ -37,23 +37,15 @@ fun DashboardScreen(
     bookings: List<Booking>,
     onEditBooking: (Booking) -> Unit,
     onDeleteBooking: (String) -> Unit,
-    onRefresh: () -> Unit,
-    isRefreshing: Boolean,
+    onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val pullToRefreshState = rememberPullToRefreshState()
 
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            pullToRefreshState.startRefresh()
-        } else {
-            pullToRefreshState.endRefresh()
-        }
-    }
-
     if (pullToRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             onRefresh()
+            pullToRefreshState.endRefresh()
         }
     }
 
