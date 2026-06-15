@@ -48,9 +48,12 @@ function writeLocalBookings(bookings) {
 }
 
 // Connect to MongoDB Atlas
+const maskedURI = MONGODB_URI.replace(/:([^:@]+)@/, ':***@');
+console.log('Attempting to connect to MongoDB URI:', maskedURI);
+
 mongoose.connect(MONGODB_URI)
   .then(() => {
-    console.log('Connected to MongoDB successfully at:', MONGODB_URI);
+    console.log('Connected to MongoDB successfully!');
     isUsingMongoDB = true;
   })
   .catch((err) => {
