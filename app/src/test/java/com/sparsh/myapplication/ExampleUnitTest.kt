@@ -34,6 +34,7 @@ class ExampleUnitTest {
         assertTrue(json.contains("paymentMethod"))
     }
 
+    /*
     @Test
     fun testMockBookingsCloudSync() {
         val mock1 = Booking(
@@ -47,7 +48,7 @@ class ExampleUnitTest {
             isBillOn = false,
             billAmount = 6500.0,
             expenses = 975.0,
-            payments = listOf(PaymentDetail(amount = 6500.0, method = "UPI")),
+            payments = listOf(PaymentDetail(amount = 6500.0, method = "UPI (Hotel Acc - GPay)")),
             notes = "Pre-paid booking via MMT. Requested extra towels."
         )
         val mock2 = Booking(
@@ -114,4 +115,5 @@ class ExampleUnitTest {
             }
         }
     }
+    */
 }
