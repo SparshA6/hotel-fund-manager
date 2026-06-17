@@ -438,8 +438,8 @@ fun AddUnassignedBookingDialog(
     var dialogPayments by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.payments ?: emptyList()) }
     var advancePaymentStr by remember(bookingToEdit) { mutableStateOf("") }
     var newPaymentAmountStr by remember { mutableStateOf("") }
-    var newPaymentMethod by remember { mutableStateOf("UPI") }
-    var advancePaymentMethod by remember(bookingToEdit) { mutableStateOf("UPI") }
+    var newPaymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
+    var advancePaymentMethod by remember(bookingToEdit) { mutableStateOf("UPI (Hotel Acc - GPay)") }
 
     val initialAllocations = remember(bookingToEdit) {
         if (bookingToEdit != null) {
@@ -745,158 +745,229 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Payments Details Section
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Payments Details",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        val totalBillValue = selectedAllocations.sumOf { it.rate.toDoubleOrNull() ?: 0.0 }
-
-                        if (bookingToEdit == null) {
-                            // New Booking: Show Advance Payment
-                            OutlinedTextField(
-                                value = advancePaymentStr,
-                                onValueChange = { advancePaymentStr = it },
-                                label = { Text("Advance Amount") },
-                                placeholder = { Text("e.g. 1000 (0 for none)") },
-                                prefix = { Text("₹ ") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(8.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
-                        } else {
-                            // Edit Booking: Show list of payments and allow adding new ones
-                            val totalPaidVal = dialogPayments.sumOf { it.amount }
-                            val balanceVal = totalBillValue - totalPaidVal
-
-                            if (dialogPayments.isEmpty()) {
-                                Text(
-                                    text = "No payments recorded yet.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                if (platform == "Direct") {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(10.dp)
                                 )
-                            } else {
-                                dialogPayments.forEach { p ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "₹${p.amount.toInt()} via ${p.method}",
-                                            fontSize = 12.sp,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        IconButton(
-                                            onClick = {
-                                                dialogPayments = dialogPayments.filter { it.id != p.id }
-                                            },
-                                            modifier = Modifier.size(24.dp)
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Payments Details",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            val totalBillValue = selectedAllocations.sumOf { it.rate.toDoubleOrNull() ?: 0.0 }
+
+                            if (bookingToEdit == null) {
+                                // New Booking: Show Advance Payment
+                                OutlinedTextField(
+                                    value = advancePaymentStr,
+                                    onValueChange = { advancePaymentStr = it },
+                                    label = { Text("Advance Amount") },
+                                    placeholder = { Text("e.g. 1000 (0 for none)") },
+                                    prefix = { Text("₹ ") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                                
+                                val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
+                                if (advVal > 0.0) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Advance Payment Method", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    
+                                    val methodList = listOf(
+                                        "UPI (Hotel Acc - GPay)",
+                                        "UPI (Sparsh Acc - GPay)",
+                                        "UPI (Meenu - PhonePe)",
+                                        "UPI (Shop - HDFC)",
+                                        "Cash",
+                                        "Card",
+                                        "Bank Transfer"
+                                    )
+                                    methodList.chunked(3).forEach { rowMethods ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Remove payment",
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                            )
+                                            rowMethods.forEach { method ->
+                                                val isSel = advancePaymentMethod == method
+                                                ElevatedCard(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(28.dp)
+                                                        .clickable { advancePaymentMethod = method },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                                    )
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = method,
+                                                            fontSize = 8.sp,
+                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (rowMethods.size < 3) {
+                                                repeat(3 - rowMethods.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
+                            } else {
+                                // Edit Booking: Show list of payments and allow adding new ones
+                                val totalPaidVal = dialogPayments.sumOf { it.amount }
+                                val balanceVal = totalBillValue - totalPaidVal
 
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Total: ₹${totalBillValue.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("Paid: ₹${totalPaidVal.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                                Text(
-                                    text = "Balance: ₹${balanceVal.toInt()}",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            if (balanceVal > 0.0) {
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                Text("Record Additional Payment", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    OutlinedTextField(
-                                        value = newPaymentAmountStr,
-                                        onValueChange = { newPaymentAmountStr = it },
-                                        placeholder = { Text("Amount") },
-                                        prefix = { Text("₹ ") },
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(8.dp),
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                if (dialogPayments.isEmpty()) {
+                                    Text(
+                                        text = "No payments recorded yet.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                     )
-
-                                    Button(
-                                        onClick = {
-                                            val amt = newPaymentAmountStr.toDoubleOrNull() ?: 0.0
-                                            if (amt > 0.0) {
-                                                dialogPayments = dialogPayments + PaymentDetail(amount = amt, method = newPaymentMethod)
-                                                newPaymentAmountStr = ""
+                                } else {
+                                    dialogPayments.forEach { p ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "₹${p.amount.toInt()} via ${p.method}",
+                                                fontSize = 12.sp,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    dialogPayments = dialogPayments.filter { it.id != p.id }
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Remove payment",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                )
                                             }
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(52.dp)
-                                    ) {
-                                        Text("Record")
+                                        }
                                     }
                                 }
 
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    listOf("UPI", "Cash", "Card", "Bank Transfer").forEach { method ->
-                                        val isSel = newPaymentMethod == method
-                                        ElevatedCard(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(28.dp)
-                                                .clickable { newPaymentMethod = method },
-                                            shape = RoundedCornerShape(6.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                            )
+                                    Text("Total: ₹${totalBillValue.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Paid: ₹${totalPaidVal.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        text = "Balance: ₹${balanceVal.toInt()}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                if (balanceVal > 0.0) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                    Text("Record Additional Payment", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = newPaymentAmountStr,
+                                            onValueChange = { newPaymentAmountStr = it },
+                                            placeholder = { Text("Amount") },
+                                            prefix = { Text("₹ ") },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(8.dp),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                val amt = newPaymentAmountStr.toDoubleOrNull() ?: 0.0
+                                                if (amt > 0.0) {
+                                                    dialogPayments = dialogPayments + PaymentDetail(amount = amt, method = newPaymentMethod)
+                                                    newPaymentAmountStr = ""
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(52.dp)
                                         ) {
-                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                Text(
-                                                    text = method,
-                                                    fontSize = 9.sp,
-                                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                            Text("Record")
+                                        }
+                                    }
+
+                                    val methodList = listOf(
+                                        "UPI (Hotel Acc - GPay)",
+                                        "UPI (Sparsh Acc - GPay)",
+                                        "UPI (Meenu - PhonePe)",
+                                        "UPI (Shop - HDFC)",
+                                        "Cash",
+                                        "Card",
+                                        "Bank Transfer"
+                                    )
+                                    methodList.chunked(3).forEach { rowMethods ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            rowMethods.forEach { method ->
+                                                val isSel = newPaymentMethod == method
+                                                ElevatedCard(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(28.dp)
+                                                        .clickable { newPaymentMethod = method },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                                    )
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = method,
+                                                            fontSize = 8.sp,
+                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (rowMethods.size < 3) {
+                                                repeat(3 - rowMethods.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
                                             }
                                         }
                                     }
@@ -1094,8 +1165,17 @@ fun AddUnassignedBookingDialog(
                     val dormItems = itemsList.filter { it.category == "Dorm Bed" }
                     val dormTotalVal = dormItems.sumOf { it.amount }
 
+                    val totalAmount = itemsList.sumOf { it.amount }
+
                     // Construct payments
-                    val finalPayments = if (bookingToEdit != null) {
+                    val finalPayments = if (platform != "Direct") {
+                        listOf(
+                            PaymentDetail(
+                                amount = totalAmount,
+                                method = "UPI (Hotel Acc - GPay)"
+                            )
+                        )
+                    } else if (bookingToEdit != null) {
                         dialogPayments
                     } else {
                         val initialPayments = mutableListOf<PaymentDetail>()
@@ -1104,14 +1184,12 @@ fun AddUnassignedBookingDialog(
                             initialPayments.add(
                                 PaymentDetail(
                                     amount = advVal,
-                                    method = "UPI"
+                                    method = advancePaymentMethod
                                 )
                             )
                         }
                         initialPayments
                     }
-
-                    val totalAmount = itemsList.sumOf { it.amount }
 
                     val newBooking = Booking(
                         id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
@@ -1523,7 +1601,7 @@ fun AddPaymentDialog(
     onConfirm: (Booking) -> Unit
 ) {
     var paymentAmountStr by remember { mutableStateOf("") }
-    var paymentMethod by remember { mutableStateOf("UPI") }
+    var paymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
     var paymentAmountError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -1562,29 +1640,46 @@ fun AddPaymentDialog(
                 )
 
                 Text("Payment Method", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("UPI", "Cash", "Card", "Bank Transfer").forEach { method ->
-                        val isSel = paymentMethod == method
-                        ElevatedCard(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp)
-                                .clickable { paymentMethod = method },
-                            shape = RoundedCornerShape(6.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = method,
-                                    fontSize = 10.sp,
-                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Bold
+                val methodList = listOf(
+                    "UPI (Hotel Acc - GPay)",
+                    "UPI (Sparsh Acc - GPay)",
+                    "UPI (Meenu - PhonePe)",
+                    "UPI (Shop - HDFC)",
+                    "Cash",
+                    "Card",
+                    "Bank Transfer"
+                )
+                methodList.chunked(3).forEach { rowMethods ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rowMethods.forEach { method ->
+                            val isSel = paymentMethod == method
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(28.dp)
+                                    .clickable { paymentMethod = method },
+                                shape = RoundedCornerShape(6.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                 )
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = method,
+                                        fontSize = 8.sp,
+                                        color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        if (rowMethods.size < 3) {
+                            repeat(3 - rowMethods.size) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
