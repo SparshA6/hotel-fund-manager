@@ -785,53 +785,50 @@ fun AddUnassignedBookingDialog(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                 )
                                 
-                                val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
-                                if (advVal > 0.0) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text("Advance Payment Method", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    
-                                    val methodList = listOf(
-                                        "UPI (Hotel Acc - GPay)",
-                                        "UPI (Sparsh Acc - GPay)",
-                                        "UPI (Meenu - PhonePe)",
-                                        "UPI (Shop - HDFC)",
-                                        "Cash",
-                                        "Card",
-                                        "Bank Transfer"
-                                    )
-                                    methodList.chunked(3).forEach { rowMethods ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            rowMethods.forEach { method ->
-                                                val isSel = advancePaymentMethod == method
-                                                ElevatedCard(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(28.dp)
-                                                        .clickable { advancePaymentMethod = method },
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    colors = CardDefaults.cardColors(
-                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Advance Payment Method", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                
+                                val methodList = listOf(
+                                    "UPI (Hotel Acc - GPay)",
+                                    "UPI (Sparsh Acc - GPay)",
+                                    "UPI (Meenu - PhonePe)",
+                                    "UPI (Shop - HDFC)",
+                                    "Cash",
+                                    "Card",
+                                    "Bank Transfer"
+                                )
+                                methodList.chunked(3).forEach { rowMethods ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        rowMethods.forEach { method ->
+                                            val isSel = advancePaymentMethod == method
+                                            ElevatedCard(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(28.dp)
+                                                    .clickable { advancePaymentMethod = method },
+                                                shape = RoundedCornerShape(6.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                                )
+                                            ) {
+                                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = method,
+                                                        fontSize = 8.sp,
+                                                        color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1
                                                     )
-                                                ) {
-                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = method,
-                                                            fontSize = 8.sp,
-                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1
-                                                        )
-                                                    }
                                                 }
                                             }
-                                            if (rowMethods.size < 3) {
-                                                repeat(3 - rowMethods.size) {
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                }
+                                        }
+                                        if (rowMethods.size < 3) {
+                                            repeat(3 - rowMethods.size) {
+                                                Spacer(modifier = Modifier.weight(1f))
                                             }
                                         }
                                     }
