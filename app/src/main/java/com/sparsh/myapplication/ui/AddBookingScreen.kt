@@ -51,6 +51,14 @@ import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.launch
 
+private fun formatDouble(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(java.util.Locale.US, "%.2f", value)
+    }
+}
+
 fun isStandardRoomCategory(category: String): Boolean {
     return category == "Room" || category == "Standard" || category == "Deluxe" || 
            category == "Double" || category == "Family" || category == "Deluxe Family"
@@ -562,7 +570,7 @@ fun AddBookingGridView(
                                                             contentAlignment = Alignment.Center
                                                         ) {
                                                             Text(
-                                                                text = "₹${bookingItem.amount.toInt()}",
+                                                                text = "₹${formatDouble(bookingItem.amount)}",
                                                                 fontWeight = FontWeight.ExtraBold,
                                                                 fontSize = if (bookingsForCell.size > 1) 9.sp else 11.sp,
                                                                 color = colors.second,
@@ -708,8 +716,8 @@ fun QuickBookDialog(
             guestName = bookingToEdit.guestName
             platform = bookingToEdit.platform
             isBillOn = bookingToEdit.isBillOn
-            billAmountStr = if (bookingToEdit.billAmount == 0.0) "" else bookingToEdit.billAmount.toInt().toString()
-            expensesStr = if (bookingToEdit.expenses == 0.0) "" else bookingToEdit.expenses.toInt().toString()
+            billAmountStr = if (bookingToEdit.billAmount == 0.0) "" else formatDouble(bookingToEdit.billAmount)
+            expensesStr = if (bookingToEdit.expenses == 0.0) "" else formatDouble(bookingToEdit.expenses)
             paymentStatus = bookingToEdit.paymentStatus
             paymentMethod = bookingToEdit.paymentMethod
             notes = bookingToEdit.notes
@@ -721,12 +729,12 @@ fun QuickBookDialog(
 
             // Populate Room category items
             dialogRoomItems = bookingToEdit.items.filter { isStandardRoomCategory(it.category) }
-            dialogItemRatesMap = dialogRoomItems.associate { it.id to (if (it.amount == 0.0) "" else it.amount.toInt().toString()) }
+            dialogItemRatesMap = dialogRoomItems.associate { it.id to (if (it.amount == 0.0) "" else formatDouble(it.amount)) }
 
             // Initialize total dorm price if there are dorm items
             val dormItems = bookingToEdit.items.filter { isDormCategory(it.category) }
             val dormSum = dormItems.sumOf { it.amount }
-            totalDormPriceStr = if (dormSum == 0.0) "" else dormSum.toInt().toString()
+            totalDormPriceStr = if (dormSum == 0.0) "" else formatDouble(dormSum)
 
             if (dormItems.isNotEmpty()) {
                 hasDormBooking = true
@@ -1167,7 +1175,7 @@ fun QuickBookDialog(
                                     supportingText = dormBedCountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                     label = { Text("Number of Beds") },
                                     placeholder = { Text("1-8") },
-                                    prefix = { Text("₹${dormShareRate.toInt()} each | ") },
+                                    prefix = { Text("₹${formatDouble(dormShareRate)} each | ") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp),
@@ -1578,7 +1586,7 @@ fun QuickBookDialog(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "₹${p.amount.toInt()} via ${p.method}",
+                                                text = "₹${formatDouble(p.amount)} via ${p.method}",
                                                 fontSize = 12.sp,
                                                 style = MaterialTheme.typography.bodySmall
                                             )
@@ -1605,10 +1613,10 @@ fun QuickBookDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Total: ₹${totalBillValue.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("Paid: ₹${totalPaidVal.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text("Total: ₹${formatDouble(totalBillValue)}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Paid: ₹${formatDouble(totalPaidVal)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                     Text(
-                                        text = "Balance: ₹${balanceVal.toInt()}",
+                                        text = "Balance: ₹${formatDouble(balanceVal)}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -2105,7 +2113,7 @@ fun CellBookingsDialog(
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            text = "₹${bookingItem?.amount?.toInt() ?: 0}",
+                                            text = "₹${bookingItem?.amount?.let { formatDouble(it) } ?: 0}",
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 15.sp,
                                             color = colors.second

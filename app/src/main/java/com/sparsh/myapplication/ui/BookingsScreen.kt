@@ -42,6 +42,14 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+private fun formatDouble(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(java.util.Locale.US, "%.2f", value)
+    }
+}
+
 data class BookingAllocationInput(
     val id: String = UUID.randomUUID().toString(),
     val category: String = "Standard",
@@ -324,12 +332,12 @@ fun UnassignedBookingCard(
             ) {
                 Column {
                     Text(
-                        text = "Total: ₹${booking.amountCharged.toInt()}",
+                        text = "Total: ₹${formatDouble(booking.amountCharged)}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Paid: ₹${booking.totalPaid.toInt()}",
+                        text = "Paid: ₹${formatDouble(booking.totalPaid)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -344,7 +352,7 @@ fun UnassignedBookingCard(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Balance: ₹${booking.balance.toInt()}",
+                            text = "Balance: ₹${formatDouble(booking.balance)}",
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp
@@ -447,7 +455,7 @@ fun AddUnassignedBookingDialog(
                 BookingAllocationInput(
                     id = item.id,
                     category = item.category,
-                    rate = item.amount.toInt().toString(),
+                    rate = formatDouble(item.amount),
                     dormBedsCount = 1
                 )
             }
@@ -457,7 +465,7 @@ fun AddUnassignedBookingDialog(
                     BookingAllocationInput(
                         id = UUID.randomUUID().toString(),
                         category = "Dorm Bed",
-                        rate = dormItems.sumOf { it.amount }.toInt().toString(),
+                        rate = formatDouble(dormItems.sumOf { it.amount }),
                         dormBedsCount = dormItems.size
                     )
                 )
@@ -852,7 +860,7 @@ fun AddUnassignedBookingDialog(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "₹${p.amount.toInt()} via ${p.method}",
+                                                text = "₹${formatDouble(p.amount)} via ${p.method}",
                                                 fontSize = 12.sp,
                                                 style = MaterialTheme.typography.bodySmall
                                             )
@@ -879,10 +887,10 @@ fun AddUnassignedBookingDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Total: ₹${totalBillValue.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("Paid: ₹${totalPaidVal.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text("Total: ₹${formatDouble(totalBillValue)}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Paid: ₹${formatDouble(totalPaidVal)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                     Text(
-                                        text = "Balance: ₹${balanceVal.toInt()}",
+                                        text = "Balance: ₹${formatDouble(balanceVal)}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -1618,7 +1626,7 @@ fun AddPaymentDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Record a payment detail for ${booking.guestName}. Outstanding Balance: ₹${booking.balance.toInt()}")
+                Text("Record a payment detail for ${booking.guestName}. Outstanding Balance: ₹${formatDouble(booking.balance)}")
 
                 OutlinedTextField(
                     value = paymentAmountStr,
@@ -1692,7 +1700,7 @@ fun AddPaymentDialog(
                         return@Button
                     }
                     if (amtVal > booking.balance) {
-                        paymentAmountError = "Amount cannot exceed outstanding balance of ₹${booking.balance.toInt()}."
+                        paymentAmountError = "Amount cannot exceed outstanding balance of ₹${formatDouble(booking.balance)}."
                         return@Button
                     }
 
