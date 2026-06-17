@@ -801,16 +801,25 @@ fun QuickBookDialog(
         }
     }
 
+    val displayDate = try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val formatter = SimpleDateFormat("dd/MM", Locale.US)
+        val d = parser.parse(date)
+        if (d != null) formatter.format(d) else date
+    } catch (e: Exception) {
+        date
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier.fillMaxWidth(0.98f),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
                 text = if (bookingToEdit != null) {
                     if (isDormMode) "Edit Booking (Bed $roomNumber)" else "Edit Booking ($roomNumber)"
                 } else {
-                    if (isDormMode) "Book Bed $roomNumber on $date" else "Book $roomNumber on $date"
+                    if (isDormMode) "Book Bed $roomNumber on $displayDate" else "Book $roomNumber on $displayDate"
                 },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
@@ -822,7 +831,7 @@ fun QuickBookDialog(
                 state = dialogLazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 600.dp),
+                    .heightIn(max = 800.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showError) {
@@ -1936,13 +1945,22 @@ fun CellBookingsDialog(
     onAddBookingClick: () -> Unit,
     onEditBookingClick: (Booking) -> Unit
 ) {
+    val displayDate = try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val formatter = SimpleDateFormat("dd/MM", Locale.US)
+        val d = parser.parse(date)
+        if (d != null) formatter.format(d) else date
+    } catch (e: Exception) {
+        date
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier.fillMaxWidth(0.98f),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
-                text = if (isDormMode) "Bookings for Bed $roomNumber on $date" else "Bookings for $roomNumber on $date",
+                text = if (isDormMode) "Bookings for Bed $roomNumber on $displayDate" else "Bookings for $roomNumber on $displayDate",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -1952,7 +1970,7 @@ fun CellBookingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp),
+                    .heightIn(max = 750.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (bookingsForCell.isEmpty()) {

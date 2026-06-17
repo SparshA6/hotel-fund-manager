@@ -492,7 +492,7 @@ fun AddUnassignedBookingDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier.fillMaxWidth(0.98f),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
@@ -506,7 +506,7 @@ fun AddUnassignedBookingDialog(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp),
+                    .heightIn(max = 800.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Guest Name
@@ -528,8 +528,19 @@ fun AddUnassignedBookingDialog(
 
                 // Check-in Date
                 item {
+                    val displayCheckInDate = if (checkInDate.isNotBlank()) {
+                        try {
+                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val formatter = SimpleDateFormat("dd/MM", Locale.US)
+                            val d = parser.parse(checkInDate)
+                            if (d != null) formatter.format(d) else checkInDate
+                        } catch (e: Exception) {
+                            checkInDate
+                        }
+                    } else ""
+
                     OutlinedTextField(
-                        value = checkInDate,
+                        value = displayCheckInDate,
                         onValueChange = {},
                         label = { Text("Check-in Date (Required)") },
                         isError = dateError != null,
