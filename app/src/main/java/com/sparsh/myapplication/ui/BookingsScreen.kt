@@ -428,7 +428,10 @@ fun AddUnassignedBookingDialog(
     onConfirm: (Booking) -> Unit
 ) {
     var guestName by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.guestName ?: "") }
-    var checkInDate by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.checkInDate ?: "") }
+    val currentDateStr = remember {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+    }
+    var checkInDate by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.checkInDate ?: currentDateStr) }
     var platform by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.platform ?: "Direct") }
     var notes by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.notes ?: "") }
 
@@ -539,23 +542,26 @@ fun AddUnassignedBookingDialog(
                         }
                     } else ""
 
-                    OutlinedTextField(
-                        value = displayCheckInDate,
-                        onValueChange = {},
-                        label = { Text("Check-in Date (Required)") },
-                        isError = dateError != null,
-                        supportingText = dateError?.let { { Text(it) } },
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { datePickerDialog.show() },
-                        trailingIcon = {
-                            IconButton(onClick = { datePickerDialog.show() }) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = displayCheckInDate,
+                            onValueChange = {},
+                            label = { Text("Check-in Date (Required)") },
+                            isError = dateError != null,
+                            supportingText = dateError?.let { { Text(it) } },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
                                 Icon(Icons.Default.DateRange, contentDescription = "Select Date")
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { datePickerDialog.show() }
+                        )
+                    }
                 }
 
                 // Platform Selection
