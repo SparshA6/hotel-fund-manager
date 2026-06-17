@@ -506,7 +506,7 @@ fun AddUnassignedBookingDialog(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 800.dp),
+                    .heightIn(max = 650.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Guest Name

@@ -831,7 +831,7 @@ fun QuickBookDialog(
                 state = dialogLazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 800.dp),
+                    .heightIn(max = 650.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showError) {
@@ -1970,7 +1970,7 @@ fun CellBookingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 750.dp),
+                    .heightIn(max = 600.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (bookingsForCell.isEmpty()) {
