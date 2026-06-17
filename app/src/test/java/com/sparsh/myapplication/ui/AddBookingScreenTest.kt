@@ -74,9 +74,7 @@ class AddBookingScreenTest {
                 ),
                 isBillOn = false,
                 billAmount = 1000.0,
-                expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Cash"
+                expenses = 0.0
             )
         )
         
@@ -132,9 +130,7 @@ class AddBookingScreenTest {
                 ),
                 isBillOn = false,
                 billAmount = 4000.0,
-                expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Cash"
+                expenses = 0.0
             ),
             Booking(
                 checkInDate = date,
@@ -148,9 +144,7 @@ class AddBookingScreenTest {
                 ),
                 isBillOn = false,
                 billAmount = 2000.0,
-                expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Cash"
+                expenses = 0.0
             ),
             Booking(
                 checkInDate = date,
@@ -161,9 +155,7 @@ class AddBookingScreenTest {
                 ),
                 isBillOn = false,
                 billAmount = 500.0,
-                expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Cash"
+                expenses = 0.0
             )
         )
         

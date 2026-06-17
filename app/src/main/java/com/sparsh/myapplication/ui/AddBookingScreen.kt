@@ -38,14 +38,27 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.sparsh.myapplication.Booking
 import com.sparsh.myapplication.BookingItem
+import com.sparsh.myapplication.PaymentDetail
+import com.sparsh.myapplication.getRoomCategory
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.launch
+
+fun isStandardRoomCategory(category: String): Boolean {
+    return category == "Room" || category == "Standard" || category == "Deluxe" || 
+           category == "Double" || category == "Family" || category == "Deluxe Family"
+}
+
+fun isDormCategory(category: String): Boolean {
+    return category == "Dorm" || category == "Dorm Bed"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +85,7 @@ fun AddBookingScreen(
         CenterAlignedTopAppBar(
             title = {
                 Text(
-                    text = "Add Booking",
+                    text = "Chart",
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -231,6 +244,21 @@ fun AddBookingGridView(
     val calendar = Calendar.getInstance()
     var currentYear by remember { mutableStateOf(calendar.get(Calendar.YEAR)) }
     var currentMonth by remember { mutableStateOf(calendar.get(Calendar.MONTH)) }
+ 
+    val bookingsLookup = remember(bookings) {
+        val map = mutableMapOf<String, MutableMap<String, MutableList<Booking>>>()
+        bookings.filter { it.isAssigned }.forEach { booking ->
+            val date = booking.checkInDate
+            booking.items.forEach { item ->
+                val normalizedCat = if (isDormCategory(item.category)) "Dorm" else "Room"
+                val key = "$normalizedCat:${item.roomNumber}"
+                map.getOrPut(date) { mutableMapOf() }
+                   .getOrPut(key) { mutableListOf() }
+                   .add(booking)
+            }
+        }
+        map
+    }
 
     val daysInMonth = remember(currentYear, currentMonth) {
         val tempCal = Calendar.getInstance()
@@ -247,12 +275,12 @@ fun AddBookingGridView(
             // Beds B1 to B8
             for (i in 1..8) list.add("B$i")
         } else {
-            // 1st Floor: 101 to 107
-            for (r in 101..107) list.add(r.toString())
-            // 2nd Floor: 201 to 207
-            for (r in 201..207) list.add(r.toString())
-            // 3rd Floor: 301 to 307
-            for (r in 301..307) list.add(r.toString())
+            // 1st Floor: 101, 102, 103, 104I, 104II, 105, 106
+            list.addAll(listOf("101", "102", "103", "104I", "104II", "105", "106"))
+            // 2nd Floor: 201, 202, 203, 204I, 204II, 205, 206
+            list.addAll(listOf("201", "202", "203", "204I", "204II", "205", "206"))
+            // 3rd Floor: 301, 302, 303, 304I, 304II, 305, 306
+            list.addAll(listOf("301", "302", "303", "304I", "304II", "305", "306"))
         }
         list
     }
@@ -393,7 +421,7 @@ fun AddBookingGridView(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (isDormMode) "Bed $col" else "Room $col",
+                                    text = if (isDormMode) "Bed $col" else col,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -408,7 +436,7 @@ fun AddBookingGridView(
                     state = lazyListState,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(daysInMonth) { dayIndex ->
+                    items(daysInMonth, key = { dayIndex -> dayIndex }) { dayIndex ->
                         val dayNum = dayIndex + 1
 
                         val cellCalendar = Calendar.getInstance().apply {
@@ -474,11 +502,8 @@ fun AddBookingGridView(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 columns.forEach { col ->
-                                    val bookingsForCell = bookings.filter { b ->
-                                        b.checkInDate == dateString && b.items.any { item -> 
-                                            item.roomNumber == col && item.category == (if (isDormMode) "Dorm" else "Room")
-                                        }
-                                    }
+                                    val cellKey = if (isDormMode) "Dorm:$col" else "Room:$col"
+                                    val bookingsForCell = bookingsLookup[dateString]?.get(cellKey) ?: emptyList()
 
                                     Box(
                                         modifier = Modifier
@@ -489,8 +514,14 @@ fun AddBookingGridView(
                                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                                             )
                                             .clickable {
-                                                selectedCellDate = dateString
-                                                selectedCellRoom = col
+                                                if (bookingsForCell.isEmpty()) {
+                                                    selectedDateForBooking = dateString
+                                                    selectedRoomForBooking = col
+                                                    bookingToEditInDialog = null
+                                                } else {
+                                                    selectedCellDate = dateString
+                                                    selectedCellRoom = col
+                                                }
                                             }
                                             .padding(2.dp),
                                         contentAlignment = Alignment.Center
@@ -500,13 +531,15 @@ fun AddBookingGridView(
                                                 modifier = Modifier.fillMaxSize(),
                                                 verticalArrangement = Arrangement.spacedBy(1.dp)
                                             ) {
-                                                bookingsForCell.forEach { booking ->
+                bookingsForCell.forEach { booking ->
                                                     val bookingItem = booking.items.find { 
-                                                        it.roomNumber == col && it.category == (if (isDormMode) "Dorm" else "Room")
+                                                        val isItemDorm = isDormCategory(it.category)
+                                                        it.roomNumber == col && isItemDorm == isDormMode
                                                     }
                                                     if (bookingItem != null) {
                                                         val isPending = booking.paymentStatus == "Pending"
                                                         val colors = getPlatformColors(booking.platform, isPending)
+                                                        val hasBalance = booking.balance > 0.0
 
                                                         Box(
                                                             modifier = Modifier
@@ -514,6 +547,17 @@ fun AddBookingGridView(
                                                                 .fillMaxWidth()
                                                                 .clip(RoundedCornerShape(4.dp))
                                                                 .background(colors.first)
+                                                                .run {
+                                                                    if (hasBalance) {
+                                                                        border(
+                                                                            width = 1.5.dp,
+                                                                            color = MaterialTheme.colorScheme.error,
+                                                                            shape = RoundedCornerShape(4.dp)
+                                                                        )
+                                                                    } else {
+                                                                        this
+                                                                    }
+                                                                }
                                                                 .padding(horizontal = 2.dp),
                                                             contentAlignment = Alignment.Center
                                                         ) {
@@ -554,11 +598,8 @@ fun AddBookingGridView(
 
     // Dialogs
     if (selectedCellDate != null && selectedCellRoom != null) {
-        val bookingsForCell = bookings.filter { b ->
-            b.checkInDate == selectedCellDate && b.items.any { item -> 
-                item.roomNumber == selectedCellRoom && item.category == (if (isDormMode) "Dorm" else "Room")
-            }
-        }
+        val cellKey = if (isDormMode) "Dorm:$selectedCellRoom" else "Room:$selectedCellRoom"
+        val bookingsForCell = bookingsLookup[selectedCellDate]?.get(cellKey) ?: emptyList()
         CellBookingsDialog(
             date = selectedCellDate!!,
             roomNumber = selectedCellRoom!!,
@@ -628,6 +669,12 @@ fun QuickBookDialog(
     var paymentStatus by remember { mutableStateOf("Paid") }
     var paymentMethod by remember { mutableStateOf("UPI") }
     var notes by remember { mutableStateOf("") }
+ 
+    var dialogPayments by remember { mutableStateOf(listOf<PaymentDetail>()) }
+    var advancePaymentStr by remember { mutableStateOf("") }
+    var advancePaymentMethod by remember { mutableStateOf("UPI") }
+    var newPaymentAmountStr by remember { mutableStateOf("") }
+    var newPaymentMethod by remember { mutableStateOf("UPI") }
 
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
@@ -643,6 +690,19 @@ fun QuickBookDialog(
     var manualBedNoToggle by remember { mutableStateOf(false) }
     var manualBedNoText by remember { mutableStateOf("") }
 
+    var guestNameError by remember { mutableStateOf<String?>(null) }
+    var roomNoErrors by remember { mutableStateOf(mapOf<String, String>()) }
+    var roomRateErrors by remember { mutableStateOf(mapOf<String, String>()) }
+    var dormBedCountError by remember { mutableStateOf<String?>(null) }
+    var dormTotalAmountError by remember { mutableStateOf<String?>(null) }
+    var dormBedsError by remember { mutableStateOf<String?>(null) }
+    var customBillError by remember { mutableStateOf<String?>(null) }
+    var expensesError by remember { mutableStateOf<String?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val dialogLazyListState = rememberLazyListState()
+    val context = LocalContext.current
+
     LaunchedEffect(bookingToEdit, roomNumber) {
         if (bookingToEdit != null) {
             guestName = bookingToEdit.guestName
@@ -653,24 +713,34 @@ fun QuickBookDialog(
             paymentStatus = bookingToEdit.paymentStatus
             paymentMethod = bookingToEdit.paymentMethod
             notes = bookingToEdit.notes
+ 
+            dialogPayments = bookingToEdit.payments
+            advancePaymentStr = ""
+            advancePaymentMethod = "UPI"
+            newPaymentAmountStr = ""
+            newPaymentMethod = "UPI"
 
             // Populate Room category items
-            dialogRoomItems = bookingToEdit.items.filter { it.category == "Room" }
+            dialogRoomItems = bookingToEdit.items.filter { isStandardRoomCategory(it.category) }
             dialogItemRatesMap = dialogRoomItems.associate { it.id to (if (it.amount == 0.0) "" else it.amount.toInt().toString()) }
 
             // Initialize total dorm price if there are dorm items
-            val dormItems = bookingToEdit.items.filter { it.category == "Dorm" }
+            val dormItems = bookingToEdit.items.filter { isDormCategory(it.category) }
             val dormSum = dormItems.sumOf { it.amount }
             totalDormPriceStr = if (dormSum == 0.0) "" else dormSum.toInt().toString()
 
             if (dormItems.isNotEmpty()) {
                 hasDormBooking = true
-                val firstDormItem = dormItems.first()
-                dormRoom = if (firstDormItem.roomNumber.startsWith("B", ignoreCase = true)) "B" else "A"
+                val firstDormItem = dormItems.firstOrNull { it.roomNumber.isNotBlank() }
+                dormRoom = if (firstDormItem != null && firstDormItem.roomNumber.startsWith("B", ignoreCase = true)) "B" else "A"
                 dormBedCount = dormItems.size
                 dormBedCountStr = dormItems.size.toString()
-                manualBedNoToggle = true
-                manualBedNoText = dormItems.map { it.roomNumber.substring(dormRoom.length) }.sorted().joinToString(", ")
+                manualBedNoToggle = dormItems.any { it.roomNumber.isNotBlank() }
+                manualBedNoText = dormItems.map { it.roomNumber }
+                    .filter { it.startsWith(dormRoom, ignoreCase = true) && it.length > dormRoom.length }
+                    .map { it.substring(dormRoom.length) }
+                    .sorted()
+                    .joinToString(", ")
             } else {
                 hasDormBooking = false
                 dormRoom = if (isDormMode && roomNumber.isNotBlank()) {
@@ -693,6 +763,12 @@ fun QuickBookDialog(
             paymentStatus = "Paid"
             paymentMethod = "UPI"
             notes = ""
+ 
+            dialogPayments = emptyList()
+            advancePaymentStr = ""
+            advancePaymentMethod = "UPI"
+            newPaymentAmountStr = ""
+            newPaymentMethod = "UPI"
 
             // Initialize with the clicked room/bed
             if (isDormMode) {
@@ -727,12 +803,14 @@ fun QuickBookDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(0.95f),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
                 text = if (bookingToEdit != null) {
-                    if (isDormMode) "Edit Booking (Bed $roomNumber)" else "Edit Booking (Room $roomNumber)"
+                    if (isDormMode) "Edit Booking (Bed $roomNumber)" else "Edit Booking ($roomNumber)"
                 } else {
-                    if (isDormMode) "Book Bed $roomNumber on $date" else "Book Room $roomNumber on $date"
+                    if (isDormMode) "Book Bed $roomNumber on $date" else "Book $roomNumber on $date"
                 },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
@@ -741,9 +819,10 @@ fun QuickBookDialog(
         },
         text = {
             LazyColumn(
+                state = dialogLazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 400.dp),
+                    .heightIn(max = 600.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showError) {
@@ -812,7 +891,12 @@ fun QuickBookDialog(
                 item {
                     OutlinedTextField(
                         value = guestName,
-                        onValueChange = { guestName = it },
+                        onValueChange = { 
+                            guestName = it 
+                            if (it.trim().isNotEmpty()) guestNameError = null
+                        },
+                        isError = guestNameError != null,
+                        supportingText = guestNameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                         label = { Text("Guest Name" + if (platform != "Direct" || isBillOn) " (Required)" else "") },
                         placeholder = { Text("e.g. Amit Patel") },
                         modifier = Modifier.fillMaxWidth(),
@@ -905,6 +989,7 @@ fun QuickBookDialog(
                                 }
 
                                 // Room Number field
+                                val hasNoErr = roomNoErrors[item.id]
                                 OutlinedTextField(
                                     value = item.roomNumber,
                                     onValueChange = { newRoomNo ->
@@ -914,7 +999,12 @@ fun QuickBookDialog(
                                             newList[index] = item.copy(roomNumber = newRoomNo)
                                             dialogRoomItems = newList
                                         }
+                                        if (newRoomNo.trim().isNotEmpty()) {
+                                            roomNoErrors = roomNoErrors - item.id
+                                        }
                                     },
+                                    isError = hasNoErr != null,
+                                    supportingText = hasNoErr?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                     placeholder = { Text("Room No", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true,
@@ -923,6 +1013,7 @@ fun QuickBookDialog(
 
                                 // Rate field
                                 val currentRateStr = dialogItemRatesMap[item.id] ?: ""
+                                val hasRateErr = roomRateErrors[item.id]
                                 OutlinedTextField(
                                     value = currentRateStr,
                                     onValueChange = { newRate ->
@@ -933,7 +1024,12 @@ fun QuickBookDialog(
                                             newList[index] = item.copy(amount = newRate.toDoubleOrNull() ?: 0.0)
                                             dialogRoomItems = newList
                                         }
+                                        if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
+                                            roomRateErrors = roomRateErrors - item.id
+                                        }
                                     },
+                                    isError = hasRateErr != null,
+                                    supportingText = hasRateErr?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                     placeholder = { Text("Rate", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     prefix = { Text("₹") },
                                     modifier = Modifier.weight(1.2f),
@@ -1056,8 +1152,11 @@ fun QuickBookDialog(
                                         val num = newValue.toIntOrNull()
                                         if (num != null && num in 1..8) {
                                             dormBedCount = num
+                                            dormBedCountError = null
                                         }
                                     },
+                                    isError = dormBedCountError != null,
+                                    supportingText = dormBedCountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                     label = { Text("Number of Beds") },
                                     placeholder = { Text("1-8") },
                                     prefix = { Text("₹${dormShareRate.toInt()} each | ") },
@@ -1130,7 +1229,12 @@ fun QuickBookDialog(
                                 if (manualBedNoToggle) {
                                     OutlinedTextField(
                                         value = manualBedNoText,
-                                        onValueChange = { manualBedNoText = it },
+                                        onValueChange = { 
+                                            manualBedNoText = it 
+                                            dormBedsError = null
+                                        },
+                                        isError = dormBedsError != null,
+                                        supportingText = dormBedsError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                         label = { Text("Bed Numbers") },
                                         placeholder = { Text("e.g. 1-4, 6") },
                                         modifier = Modifier.fillMaxWidth(),
@@ -1163,7 +1267,12 @@ fun QuickBookDialog(
                     item {
                         OutlinedTextField(
                             value = totalDormPriceStr,
-                            onValueChange = { totalDormPriceStr = it },
+                            onValueChange = { 
+                                totalDormPriceStr = it 
+                                if ((it.toDoubleOrNull() ?: 0.0) > 0.0) dormTotalAmountError = null
+                            },
+                            isError = dormTotalAmountError != null,
+                            supportingText = dormTotalAmountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                             label = { Text("Total Dorm Price") },
                             placeholder = { Text("e.g. 1500") },
                             prefix = { Text("₹ ") },
@@ -1196,7 +1305,12 @@ fun QuickBookDialog(
                                 Spacer(modifier = Modifier.height(6.dp))
                                 OutlinedTextField(
                                     value = billAmountStr,
-                                    onValueChange = { billAmountStr = it },
+                                    onValueChange = { 
+                                        billAmountStr = it 
+                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
+                                    },
+                                    isError = customBillError != null,
+                                    supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                     label = { Text("Custom Bill Amount") },
                                     placeholder = { Text("e.g. 2800") },
                                     prefix = { Text("₹ ") },
@@ -1210,73 +1324,122 @@ fun QuickBookDialog(
                     }
                 }
 
-                // Payment Status
-                item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Payment Status", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("Paid", "Pending").forEach { status ->
-                                val isSel = paymentStatus == status
-                                ElevatedCard(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(36.dp)
-                                        .clickable { paymentStatus = status },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                    )
+                // Dynamic OTA Commission Calculation Display Label
+                if (platform != "Direct") {
+                    item {
+                        val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + (totalDormPriceStr.toDoubleOrNull() ?: 0.0))
+                        val totalBillValue = if (platform == "Direct" && isBillOn) {
+                            billAmountStr.toDoubleOrNull() ?: calculatedSum
+                        } else {
+                            calculatedSum
+                        }
+                        
+                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, totalBillValue)
+                        
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "$platform Commission Breakdown",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                
+                                val formatMoney = { amt: Double -> "₹${String.format(java.util.Locale.US, "%.2f", amt)}" }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text(status, fontSize = 12.sp, color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                                    }
+                                    Text("Guest Paid (Total):", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(formatMoney(breakdown.guestAmount), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val taxPct = com.sparsh.myapplication.SettingsManager.getTaxRate(context)
+                                    Text("Tax ($taxPct%):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(breakdown.tax), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Base Amount (Total - Tax):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(breakdown.base), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val commPct = com.sparsh.myapplication.SettingsManager.getCommissionRate(context, platform)
+                                    Text("Commission ($commPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(breakdown.commission), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val tdsPct = com.sparsh.myapplication.SettingsManager.getTdsRate(context)
+                                    Text("TDS ($tdsPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(breakdown.tds), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val tcsPct = com.sparsh.myapplication.SettingsManager.getTcsRate(context)
+                                    Text("TCS ($tcsPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(breakdown.tcs), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Total Deductions (Expense):", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                    Text(formatMoney(breakdown.totalDeductions), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                }
+                                
+                                val remainingBase = breakdown.base - breakdown.totalDeductions
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Remaining (Base - Deductions):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMoney(remainingBase), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Platform Pays Us (Remaining + Tax):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text(formatMoney(breakdown.netPayout), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }
                     }
-                }
-
-                // Payment Method
-                item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Payment Method", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("UPI", "Cash", "Card", "Bank Transfer").forEach { method ->
-                                val isSel = paymentMethod == method
-                                ElevatedCard(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(32.dp)
-                                        .clickable { paymentMethod = method },
-                                    shape = RoundedCornerShape(6.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.9f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                    )
-                                ) {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text(method, fontSize = 10.sp, color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Expenses / OTA Commission
-                item {
-                    OutlinedTextField(
-                        value = expensesStr,
-                        onValueChange = { expensesStr = it },
-                        label = { Text("OTA Commission / Expenses") },
-                        placeholder = { Text("e.g. 450") },
-                        prefix = { Text("₹ ") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
                 }
 
                 // Notes
@@ -1291,19 +1454,223 @@ fun QuickBookDialog(
                         shape = RoundedCornerShape(10.dp)
                     )
                 }
+
+                // Payments Details Section
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Payments Details",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + (totalDormPriceStr.toDoubleOrNull() ?: 0.0))
+                        
+                        val totalBillValue = if (platform == "Direct" && isBillOn) {
+                            billAmountStr.toDoubleOrNull() ?: calculatedSum
+                        } else {
+                            calculatedSum
+                        }
+
+                        if (bookingToEdit == null) {
+                            // New Booking: Show Advance Payment
+                            OutlinedTextField(
+                                value = advancePaymentStr,
+                                onValueChange = { advancePaymentStr = it },
+                                label = { Text("Advance Payment Amount") },
+                                placeholder = { Text("e.g. 1000 (0 for none)") },
+                                prefix = { Text("₹ ") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        } else {
+                            // Edit Booking: Show list of payments and allow adding new ones
+                            val totalPaidVal = dialogPayments.sumOf { it.amount }
+                            val balanceVal = totalBillValue - totalPaidVal
+
+                            if (dialogPayments.isEmpty()) {
+                                Text(
+                                    text = "No payments recorded yet.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            } else {
+                                dialogPayments.forEach { p ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "₹${p.amount.toInt()} via ${p.method}",
+                                            fontSize = 12.sp,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                dialogPayments = dialogPayments.filter { it.id != p.id }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Remove payment",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Total: ₹${totalBillValue.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Paid: ₹${totalPaidVal.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    text = "Balance: ₹${balanceVal.toInt()}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            if (balanceVal > 0.0) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                Text("Record Additional Payment", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = newPaymentAmountStr,
+                                        onValueChange = { newPaymentAmountStr = it },
+                                        placeholder = { Text("Amount") },
+                                        prefix = { Text("₹ ") },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            val amt = newPaymentAmountStr.toDoubleOrNull() ?: 0.0
+                                            if (amt > 0.0) {
+                                                dialogPayments = dialogPayments + PaymentDetail(amount = amt, method = newPaymentMethod)
+                                                newPaymentAmountStr = ""
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(52.dp)
+                                    ) {
+                                        Text("Record")
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf("UPI", "Cash", "Card", "Bank Transfer").forEach { method ->
+                                        val isSel = newPaymentMethod == method
+                                        ElevatedCard(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(28.dp)
+                                                .clickable { newPaymentMethod = method },
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = method,
+                                                    fontSize = 9.sp,
+                                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
+                    // Clear previous errors
+                    guestNameError = null
+                    val newRoomNoErrors = mutableMapOf<String, String>()
+                    val newRoomRateErrors = mutableMapOf<String, String>()
+                    roomNoErrors = emptyMap()
+                    roomRateErrors = emptyMap()
+                    dormBedCountError = null
+                    dormBedsError = null
+                    dormTotalAmountError = null
+                    customBillError = null
+                    expensesError = null
                     showError = false
                     errorMessage = ""
+
+                    val scrollToField = { field: String ->
+                        var idx = 0
+                        if (showError) idx++ // Error Card (index 0)
+                        
+                        val targetIdx = when (field) {
+                            "platform" -> idx
+                            "guestName" -> idx + 1
+                            "roomsList" -> idx + 2
+                            "dormBeds" -> idx + 3
+                            "dormTotalAmount" -> idx + 4
+                            "customBill" -> {
+                                var currentIdx = idx + 3
+                                if (hasDormBooking) currentIdx += 2
+                                currentIdx
+                            }
+                            else -> 0
+                        }
+                        coroutineScope.launch {
+                            dialogLazyListState.animateScrollToItem(targetIdx)
+                        }
+                    }
 
                     // 1. Validate name if required
                     val nameRequired = (platform != "Direct") || (platform == "Direct" && isBillOn)
                     if (nameRequired && guestName.trim().isEmpty()) {
+                        guestNameError = "Guest Name is required for this booking type."
                         errorMessage = "Guest Name is required for this booking type."
                         showError = true
+                        scrollToField("guestName")
                         return@Button
                     }
 
@@ -1311,16 +1678,26 @@ fun QuickBookDialog(
                     if (dialogRoomItems.isEmpty() && !hasDormBooking) {
                         errorMessage = "Please allocate at least one room or bed."
                         showError = true
+                        scrollToField("roomsList")
                         return@Button
                     }
 
                     // 3. Validate Room items details
-                    val hasInvalidRoom = dialogRoomItems.filter { it.category == "Room" }.any { 
-                        it.roomNumber.trim().isEmpty() || (dialogItemRatesMap[it.id]?.toDoubleOrNull() ?: 0.0) <= 0.0 
+                    dialogRoomItems.filter { it.category == "Room" }.forEach { item ->
+                        if (item.roomNumber.trim().isEmpty()) {
+                            newRoomNoErrors[item.id] = "Room number is required."
+                        }
+                        val rateVal = dialogItemRatesMap[item.id]?.toDoubleOrNull() ?: 0.0
+                        if (rateVal <= 0.0) {
+                            newRoomRateErrors[item.id] = "Rate must be greater than 0."
+                        }
                     }
-                    if (hasInvalidRoom) {
+                    if (newRoomNoErrors.isNotEmpty() || newRoomRateErrors.isNotEmpty()) {
+                        roomNoErrors = newRoomNoErrors
+                        roomRateErrors = newRoomRateErrors
                         errorMessage = "Please enter valid room numbers and rates (> 0)."
                         showError = true
+                        scrollToField("roomsList")
                         return@Button
                     }
 
@@ -1329,29 +1706,37 @@ fun QuickBookDialog(
                     if (hasDormBooking) {
                         val bedCountVal = dormBedCountStr.toIntOrNull()
                         if (bedCountVal == null || bedCountVal !in 1..8) {
+                            dormBedCountError = "Please enter a valid number of beds (between 1 and 8)."
                             errorMessage = "Please enter a valid number of beds (between 1 and 8)."
                             showError = true
+                            scrollToField("dormBeds")
                             return@Button
                         }
                         dormBedCount = bedCountVal
 
                         val totalDormVal = totalDormPriceStr.toDoubleOrNull()
                         if (totalDormVal == null || totalDormVal <= 0.0) {
+                            dormTotalAmountError = "Please enter a valid total dorm price."
                             errorMessage = "Please enter a valid total dorm price."
                             showError = true
+                            scrollToField("dormTotalAmount")
                             return@Button
                         }
 
                         if (manualBedNoToggle) {
                             if (manualBedNoText.trim().isEmpty()) {
+                                dormBedsError = "Please enter bed numbers."
                                 errorMessage = "Please enter bed numbers."
                                 showError = true
+                                scrollToField("dormBeds")
                                 return@Button
                             }
                             parsedDormBeds = parseBedNumbers(manualBedNoText, dormRoom)
                             if (parsedDormBeds.isEmpty()) {
+                                dormBedsError = "Please enter valid bed numbers (e.g. 1-4, 6)."
                                 errorMessage = "Please enter valid bed numbers (e.g. 1-4, 6)."
                                 showError = true
+                                scrollToField("dormBeds")
                                 return@Button
                             }
                             
@@ -1361,14 +1746,18 @@ fun QuickBookDialog(
                                 num == null || num !in 1..8
                             }
                             if (invalidBed) {
+                                dormBedsError = "Bed numbers must be between 1 and 8."
                                 errorMessage = "Bed numbers must be between 1 and 8."
                                 showError = true
+                                scrollToField("dormBeds")
                                 return@Button
                             }
 
                             if (parsedDormBeds.size != dormBedCount) {
+                                dormBedsError = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
                                 errorMessage = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
                                 showError = true
+                                scrollToField("dormBeds")
                                 return@Button
                             }
                         } else {
@@ -1401,7 +1790,7 @@ fun QuickBookDialog(
                         parsedDormBeds.map { bedNo ->
                             BookingItem(
                                 id = UUID.randomUUID().toString(),
-                                category = "Dorm",
+                                category = getRoomCategory(bedNo),
                                 roomNumber = bedNo,
                                 amount = dormShareRate
                             )
@@ -1411,7 +1800,10 @@ fun QuickBookDialog(
                     }
 
                     val roomBookingItems = dialogRoomItems.map { item ->
-                        item.copy(amount = dialogItemRatesMap[item.id]?.toDoubleOrNull() ?: 0.0)
+                        item.copy(
+                            category = if (item.roomNumber.isNotBlank()) getRoomCategory(item.roomNumber) else item.category,
+                            amount = dialogItemRatesMap[item.id]?.toDoubleOrNull() ?: 0.0
+                        )
                     }
 
                     val updatedItems = roomBookingItems + dormBookingItems
@@ -1420,8 +1812,10 @@ fun QuickBookDialog(
                     val finalBillAmount = if (platform == "Direct" && isBillOn) {
                         val customBill = billAmountStr.toDoubleOrNull()
                         if (customBill == null || customBill <= 0.0) {
+                            customBillError = "Please enter a valid custom bill amount."
                             errorMessage = "Please enter a valid custom bill amount."
                             showError = true
+                            scrollToField("customBill")
                             return@Button
                         }
                         customBill
@@ -1429,12 +1823,10 @@ fun QuickBookDialog(
                         calculatedSum
                     }
 
-                    // 5. Validate expenses
-                    val commissionVal = if (expensesStr.trim().isEmpty()) 0.0 else expensesStr.toDoubleOrNull()
-                    if (commissionVal == null || commissionVal < 0.0) {
-                        errorMessage = "Please enter a valid commission or expense amount."
-                        showError = true
-                        return@Button
+                    val commissionVal = if (platform != "Direct") {
+                        com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, finalBillAmount).totalDeductions
+                    } else {
+                        0.0
                     }
 
                     // Create/Update Booking
@@ -1447,6 +1839,17 @@ fun QuickBookDialog(
                     val dormRoomBBedsStr = if (hasDormBooking && dormRoom == "B") {
                         if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
                     } else ""
+
+                    val finalPayments = if (bookingToEdit == null) {
+                        val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
+                        if (advVal > 0.0) {
+                            listOf(PaymentDetail(amount = advVal, method = "UPI"))
+                        } else {
+                            emptyList()
+                        }
+                    } else {
+                        dialogPayments
+                    }
 
                     val newBooking = Booking(
                         id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
@@ -1461,8 +1864,7 @@ fun QuickBookDialog(
                         isBillOn = if (platform == "Direct") isBillOn else true,
                         billAmount = finalBillAmount,
                         expenses = commissionVal,
-                        paymentStatus = paymentStatus,
-                        paymentMethod = paymentMethod,
+                        payments = finalPayments,
                         notes = notes.trim(),
                         timestamp = bookingToEdit?.timestamp ?: System.currentTimeMillis()
                     )
@@ -1482,7 +1884,7 @@ fun QuickBookDialog(
                             title = { Text("Delete Booking", fontWeight = FontWeight.Bold) },
                             text = {
                                 val itemsDescription = bookingToEdit.items.map { 
-                                    if (it.category == "Dorm") "Bed ${it.roomNumber}" else "Room ${it.roomNumber}" 
+                                    if (isDormCategory(it.category)) "Bed ${it.roomNumber}" else it.roomNumber 
                                 }.filter { it.isNotBlank() }
                                 if (itemsDescription.size > 1) {
                                     Text("This booking contains multiple allocations: ${itemsDescription.joinToString(", ")}. Deleting it will remove the entire booking across all these allocations. Are you sure you want to delete this booking?")
@@ -1536,9 +1938,11 @@ fun CellBookingsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(0.95f),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
-                text = if (isDormMode) "Bookings for Bed $roomNumber on $date" else "Bookings for Room $roomNumber on $date",
+                text = if (isDormMode) "Bookings for Bed $roomNumber on $date" else "Bookings for $roomNumber on $date",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -1548,7 +1952,7 @@ fun CellBookingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 350.dp),
+                    .heightIn(max = 500.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (bookingsForCell.isEmpty()) {
@@ -1571,7 +1975,8 @@ fun CellBookingsDialog(
                     ) {
                         items(bookingsForCell) { booking ->
                             val bookingItem = booking.items.find { 
-                                it.roomNumber == roomNumber && it.category == (if (isDormMode) "Dorm" else "Room") 
+                                val isItemDorm = isDormCategory(it.category)
+                                it.roomNumber == roomNumber && isItemDorm == isDormMode
                             }
                             val isPending = booking.paymentStatus == "Pending"
                             val colors = getPlatformColors(booking.platform, isPending)
@@ -1687,7 +2092,7 @@ fun getDormBedBookingCounts(
     
     for (b in activeBookings) {
         for (item in b.items) {
-            if (item.category == "Dorm") {
+            if (isDormCategory(item.category)) {
                 val roomNum = item.roomNumber.trim()
                 if (roomNum.startsWith(dormRoom, ignoreCase = true)) {
                     val bedIndexStr = roomNum.substring(dormRoom.length)

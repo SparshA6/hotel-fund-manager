@@ -16,10 +16,26 @@ class BookingRepository(context: Context) {
 
     private val KEY_BOOKINGS = "key_bookings"
 
+    private val client = okhttp3.OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val buffer = okio.Buffer()
+            request.body()?.writeTo(buffer)
+            val bodyStr = buffer.readUtf8()
+            Log.e("BookingRepository", "API REQUEST: ${request.method()} ${request.url()} - Body: $bodyStr")
+            chain.proceed(request)
+        }
+        .build()
+
+    private val gson = com.google.gson.GsonBuilder()
+        .registerTypeAdapter(Booking::class.java, BookingTypeAdapter())
+        .create()
+
     // Base Retrofit initialization
     private val retrofit = Retrofit.Builder()
         .baseUrl(BASE_URL)
-        .addConverterFactory(GsonConverterFactory.create())
+        .client(client)
+        .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
 
     private val api = retrofit.create(BookingApi::class.java)
@@ -55,6 +71,9 @@ class BookingRepository(context: Context) {
             Log.d("BookingRepository", "Saving booking ${booking.id} to cloud...")
             api.saveBooking(booking)
             Log.d("BookingRepository", "Saved booking to cloud successfully.")
+        } catch (e: retrofit2.HttpException) {
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("BookingRepository", "Failed to save booking to cloud: HTTP ${e.code()} - $errorBody. Saved locally.")
         } catch (e: Exception) {
             Log.e("BookingRepository", "Failed to save booking to cloud: ${e.message}. Saved locally.")
         }
@@ -84,7 +103,7 @@ class BookingRepository(context: Context) {
 
     // --- Local Caching Helpers ---
 
-    private fun getLocalBookings(): List<Booking> {
+    fun getLocalBookings(): List<Booking> {
         val bookingsJsonString = sharedPreferences.getString(KEY_BOOKINGS, null) ?: return emptyList()
         return try {
             val jsonArray = JSONArray(bookingsJsonString)
@@ -107,5 +126,26 @@ class BookingRepository(context: Context) {
 
     companion object {
         private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
+    }
+}
+
+class BookingTypeAdapter : com.google.gson.JsonSerializer<Booking>, com.google.gson.JsonDeserializer<Booking> {
+    override fun serialize(
+        src: Booking,
+        typeOfSrc: java.lang.reflect.Type,
+        context: com.google.gson.JsonSerializationContext
+    ): com.google.gson.JsonElement {
+        val jsonStr = src.toJsonObject().toString()
+        return com.google.gson.JsonParser.parseString(jsonStr)
+    }
+
+    override fun deserialize(
+        json: com.google.gson.JsonElement,
+        typeOfT: java.lang.reflect.Type,
+        context: com.google.gson.JsonDeserializationContext
+    ): Booking {
+        val jsonStr = json.toString()
+        val jsonObject = org.json.JSONObject(jsonStr)
+        return Booking.fromJsonObject(jsonObject)
     }
 }

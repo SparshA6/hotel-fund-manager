@@ -13,15 +13,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.filled.DateRange
 import com.sparsh.myapplication.ui.AddBookingScreen
 import com.sparsh.myapplication.ui.DashboardScreen
 import com.sparsh.myapplication.ui.SearchScreen
 import com.sparsh.myapplication.ui.QuickBookDialog
+import com.sparsh.myapplication.ui.BookingsScreen
+import com.sparsh.myapplication.ui.SettingsScreen
 import com.sparsh.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -41,23 +45,22 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 var currentTab by remember { mutableStateOf(0) }
                 var bookingToEdit by remember { mutableStateOf<Booking?>(null) }
-                val bookings = remember { mutableStateOf<List<Booking>>(emptyList()) }
+                val bookings = remember { mutableStateOf<List<Booking>>(bookingRepository.getLocalBookings()) }
                 val coroutineScope = rememberCoroutineScope()
                 var isLoading by remember { mutableStateOf(true) }
-
+ 
                 LaunchedEffect(currentTab) {
-                    if (currentTab == 0) {
+                    if (currentTab == 0 || currentTab == 1 || currentTab == 2) {
+                        bookings.value = bookingRepository.getLocalBookings()
                         isLoading = true
                         bookings.value = bookingRepository.getBookings()
                         isLoading = false
                     }
                 }
-
-                var isAddBookingInitialized by remember { mutableStateOf(false) }
-                var isSearchInitialized by remember { mutableStateOf(false) }
-
-                if (currentTab == 1) isAddBookingInitialized = true
-                if (currentTab == 2) isSearchInitialized = true
+ 
+                var isAddBookingInitialized by remember { mutableStateOf(true) }
+                var isBookingsScreenInitialized by remember { mutableStateOf(true) }
+                var isSearchInitialized by remember { mutableStateOf(true) }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -81,11 +84,11 @@ class MainActivity : ComponentActivity() {
                                 onClick = { 
                                     currentTab = 1 
                                 },
-                                label = { Text("Add Booking") },
+                                label = { Text("Chart") },
                                 icon = {
                                     Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Booking"
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "Chart"
                                     )
                                 }
                             )
@@ -94,11 +97,37 @@ class MainActivity : ComponentActivity() {
                                 onClick = { 
                                     currentTab = 2 
                                 },
+                                label = { Text("Bookings") },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Bookings"
+                                    )
+                                }
+                            )
+                            NavigationBarItem(
+                                selected = currentTab == 3,
+                                onClick = { 
+                                    currentTab = 3 
+                                },
                                 label = { Text("Search") },
                                 icon = {
                                     Icon(
                                         imageVector = Icons.Default.Search,
                                         contentDescription = "Search"
+                                    )
+                                }
+                            )
+                            NavigationBarItem(
+                                selected = currentTab == 4,
+                                onClick = { 
+                                    currentTab = 4 
+                                },
+                                label = { Text("Settings") },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings"
                                     )
                                 }
                             )
@@ -158,9 +187,32 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        if (isSearchInitialized) {
+                        if (isBookingsScreenInitialized) {
                             Box(
                                 modifier = if (currentTab == 2) Modifier.fillMaxSize() else Modifier.size(0.dp)
+                            ) {
+                                BookingsScreen(
+                                    bookings = bookings.value,
+                                    onSaveBooking = { newBooking ->
+                                        coroutineScope.launch {
+                                            bookingRepository.saveBooking(newBooking)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                    },
+                                    onDeleteBooking = { id ->
+                                        coroutineScope.launch {
+                                            bookingRepository.deleteBooking(id)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+ 
+                        if (isSearchInitialized) {
+                            Box(
+                                modifier = if (currentTab == 3) Modifier.fillMaxSize() else Modifier.size(0.dp)
                             ) {
                                 SearchScreen(
                                     bookings = bookings.value,
@@ -178,13 +230,21 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        Box(
+                            modifier = if (currentTab == 4) Modifier.fillMaxSize() else Modifier.size(0.dp)
+                        ) {
+                            SettingsScreen(
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
                         if (bookingToEdit != null) {
                             QuickBookDialog(
                                 date = bookingToEdit!!.checkInDate,
                                 roomNumber = bookingToEdit!!.items.firstOrNull()?.roomNumber ?: "",
                                 bookings = bookings.value,
                                 bookingToEdit = bookingToEdit,
-                                isDormMode = bookingToEdit!!.items.any { it.category == "Dorm" },
+                                isDormMode = bookingToEdit!!.items.any { it.category == "Dorm" || it.category == "Dorm Bed" },
                                 onDismiss = { bookingToEdit = null },
                                 onConfirm = { updatedBooking ->
                                     coroutineScope.launch {
@@ -231,8 +291,7 @@ class MainActivity : ComponentActivity() {
                 isBillOn = false,
                 billAmount = 6500.0,
                 expenses = 975.0, // 15% OTA commission
-                paymentStatus = "Paid",
-                paymentMethod = "UPI",
+                payments = listOf(PaymentDetail(amount = 6500.0, method = "UPI")),
                 notes = "Pre-paid booking via MMT. Requested extra towels."
             )
             val mock2 = Booking(
@@ -245,8 +304,7 @@ class MainActivity : ComponentActivity() {
                 isBillOn = false,
                 billAmount = 3800.0,
                 expenses = 570.0, // 15% commission
-                paymentStatus = "Pending",
-                paymentMethod = "Card",
+                payments = emptyList(),
                 notes = "Will pay at counter during checkout."
             )
             val mock3 = Booking(
@@ -259,8 +317,7 @@ class MainActivity : ComponentActivity() {
                 isBillOn = true,
                 billAmount = 3000.0, // Custom bill total showing discount
                 expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Cash",
+                payments = listOf(PaymentDetail(amount = 3000.0, method = "Cash")),
                 notes = "Corporate discount applied. Custom bill amount of 3000.0."
             )
             val mock4 = Booking(
@@ -275,8 +332,7 @@ class MainActivity : ComponentActivity() {
                 isBillOn = false,
                 billAmount = 2400.0,
                 expenses = 0.0,
-                paymentStatus = "Paid",
-                paymentMethod = "Bank Transfer",
+                payments = listOf(PaymentDetail(amount = 2400.0, method = "Bank Transfer")),
                 notes = "Group check-in for dorm beds. 3 beds in Room A and 1 bed in Room B."
             )
             bookingRepository.saveBooking(mock1)

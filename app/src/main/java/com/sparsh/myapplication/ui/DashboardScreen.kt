@@ -41,6 +41,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val pullToRefreshState = rememberPullToRefreshState()
+    var selectedBookingForAssignment by remember { mutableStateOf<Booking?>(null) }
 
     if (pullToRefreshState.isRefreshing) {
         LaunchedEffect(true) {
@@ -392,7 +393,10 @@ fun DashboardScreen(
                         booking = booking,
                         currencyFormatter = currencyFormatter,
                         onEdit = { onEditBooking(booking) },
-                        onDelete = { onDeleteBooking(booking.id) }
+                        onDelete = { onDeleteBooking(booking.id) },
+                        onAssignClick = if (!booking.isAssigned) {
+                            { selectedBookingForAssignment = booking }
+                        } else null
                     )
                 }
             }
@@ -402,6 +406,18 @@ fun DashboardScreen(
             PullToRefreshContainer(
                 state = pullToRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
+
+        if (selectedBookingForAssignment != null) {
+            AssignRoomsDialog(
+                booking = selectedBookingForAssignment!!,
+                bookings = bookings,
+                onDismiss = { selectedBookingForAssignment = null },
+                onConfirm = { updatedBooking ->
+                    onEditBooking(updatedBooking)
+                    selectedBookingForAssignment = null
+                }
             )
         }
     }

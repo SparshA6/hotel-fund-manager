@@ -66,8 +66,15 @@ mongoose.connect(MONGODB_URI)
 const BookingItemSchema = new mongoose.Schema({
   id: { type: String, required: true },
   category: { type: String, required: true },
-  roomNumber: { type: String, required: true },
+  roomNumber: { type: String, default: "" },
   amount: { type: Number, required: true }
+});
+
+const PaymentDetailSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  amount: { type: Number, required: true },
+  method: { type: String, required: true },
+  timestamp: { type: Number, required: true }
 });
 
 const BookingSchema = new mongoose.Schema({
@@ -85,6 +92,7 @@ const BookingSchema = new mongoose.Schema({
   expenses: { type: Number, default: 0.0 },
   paymentStatus: { type: String, required: true },
   paymentMethod: { type: String, required: true },
+  payments: [PaymentDetailSchema],
   notes: { type: String, default: "" },
   timestamp: { type: Number, required: true }
 });

@@ -22,7 +22,8 @@ fun BookingItem(
     currencyFormatter: NumberFormat,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onAssignClick: (() -> Unit)? = null
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -177,7 +178,7 @@ fun BookingItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        val roomDesc = booking.items.filter { it.category == "Room" }.joinToString(", ") { "${it.category} ${it.roomNumber}" }
+                        val roomDesc = booking.items.filter { it.category != "Dorm" && it.category != "Dorm Bed" }.joinToString(", ") { it.roomNumber }
                         val dormList = mutableListOf<String>()
                         if (booking.dormBedsSelected > 0) {
                             if (booking.dormRoomABeds.isNotBlank()) dormList.add("Dorm A: (${booking.dormRoomABeds})")
@@ -208,6 +209,22 @@ fun BookingItem(
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+
+                if (!booking.isAssigned && onAssignClick != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onAssignClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Text("Assign Room", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
