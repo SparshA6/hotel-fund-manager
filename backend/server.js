@@ -47,6 +47,29 @@ function writeLocalBookings(bookings) {
   }
 }
 
+const BACKUPS_FILE_PATH = path.join(__dirname, 'backups.json');
+
+function readLocalBackups() {
+  try {
+    if (!fs.existsSync(BACKUPS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(BACKUPS_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading local backups file:', error);
+    return [];
+  }
+}
+
+function writeLocalBackups(backups) {
+  try {
+    fs.writeFileSync(BACKUPS_FILE_PATH, JSON.stringify(backups, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local backups file:', error);
+  }
+}
+
 // Connect to MongoDB Atlas
 const maskedURI = MONGODB_URI.replace(/:([^:@]+)@/, ':***@');
 console.log('Attempting to connect to MongoDB URI:', maskedURI);
@@ -98,6 +121,16 @@ const BookingSchema = new mongoose.Schema({
 });
 
 const Booking = mongoose.model('Booking', BookingSchema);
+
+const BackupSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  timestamp: { type: Number, required: true },
+  displayDate: { type: String, required: true },
+  bookingCount: { type: Number, required: true },
+  bookings: [BookingSchema]
+});
+
+const Backup = mongoose.model('Backup', BackupSchema);
 
 // REST API Endpoints
 
@@ -174,6 +207,128 @@ app.delete('/api/bookings/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting booking:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Backups Endpoints
+
+// 1. Get all backups (metadata only)
+app.get('/api/backups', async (req, res) => {
+  try {
+    if (isUsingMongoDB) {
+      const backups = await Backup.find({}, { bookings: 0 }).sort({ timestamp: -1 });
+      res.json(backups);
+    } else {
+      const backups = readLocalBackups();
+      const metadata = backups.map(b => {
+        const { bookings, ...meta } = b;
+        return meta;
+      });
+      metadata.sort((a, b) => b.timestamp - a.timestamp);
+      res.json(metadata);
+    }
+  } catch (error) {
+    console.error('Error fetching backups:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 2. Create a new backup from current DB state
+app.post('/api/backups', async (req, res) => {
+  try {
+    const timestamp = Date.now();
+    const displayDate = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const id = 'backup_' + timestamp;
+
+    let bookings = [];
+    if (isUsingMongoDB) {
+      bookings = await Booking.find();
+    } else {
+      bookings = readLocalBookings();
+    }
+
+    const backupData = {
+      id,
+      timestamp,
+      displayDate,
+      bookingCount: bookings.length,
+      bookings: bookings
+    };
+
+    if (isUsingMongoDB) {
+      const newBackup = new Backup(backupData);
+      await newBackup.save();
+      const { bookings: _, ...meta } = backupData;
+      res.json(meta);
+    } else {
+      const backups = readLocalBackups();
+      backups.push(backupData);
+      writeLocalBackups(backups);
+      const { bookings: _, ...meta } = backupData;
+      res.json(meta);
+    }
+  } catch (error) {
+    console.error('Error creating backup:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 3. Restore a backup
+app.post('/api/backups/:id/restore', async (req, res) => {
+  try {
+    const backupId = req.params.id;
+    let backupDoc = null;
+
+    if (isUsingMongoDB) {
+      backupDoc = await Backup.findOne({ id: backupId });
+    } else {
+      const backups = readLocalBackups();
+      backupDoc = backups.find(b => b.id === backupId);
+    }
+
+    if (!backupDoc) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    if (isUsingMongoDB) {
+      await Booking.deleteMany({});
+      if (backupDoc.bookings && backupDoc.bookings.length > 0) {
+        await Booking.insertMany(backupDoc.bookings);
+      }
+    } else {
+      writeLocalBookings(backupDoc.bookings || []);
+    }
+
+    res.json({ message: 'Backup restored successfully', bookingCount: backupDoc.bookingCount });
+  } catch (error) {
+    console.error('Error restoring backup:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 4. Delete a backup
+app.delete('/api/backups/:id', async (req, res) => {
+  try {
+    const backupId = req.params.id;
+
+    if (isUsingMongoDB) {
+      const result = await Backup.findOneAndDelete({ id: backupId });
+      if (!result) {
+        return res.status(404).json({ error: 'Backup not found' });
+      }
+      res.json({ message: 'Backup deleted successfully', id: backupId });
+    } else {
+      const backups = readLocalBackups();
+      const filtered = backups.filter(b => b.id !== backupId);
+      if (backups.length === filtered.length) {
+        return res.status(404).json({ error: 'Backup not found' });
+      }
+      writeLocalBackups(filtered);
+      res.json({ message: 'Backup deleted successfully', id: backupId });
+    }
+  } catch (error) {
+    console.error('Error deleting backup:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

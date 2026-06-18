@@ -124,6 +124,25 @@ class BookingRepository(context: Context) {
         sharedPreferences.edit().putString(KEY_BOOKINGS, jsonArray.toString()).apply()
     }
 
+    suspend fun getBackups(): List<BackupInfo> = withContext(Dispatchers.IO) {
+        api.getBackups()
+    }
+
+    suspend fun createBackup(): BackupInfo = withContext(Dispatchers.IO) {
+        api.createBackup()
+    }
+
+    suspend fun deleteBackupFromServer(id: String) = withContext(Dispatchers.IO) {
+        api.deleteBackup(id)
+    }
+
+    suspend fun restoreBackupAndSync(id: String): List<Booking> = withContext(Dispatchers.IO) {
+        api.restoreBackup(id)
+        val remoteBookings = api.getBookings()
+        saveAllLocalBookings(remoteBookings)
+        remoteBookings.sortedByDescending { it.timestamp }
+    }
+
     companion object {
         private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
     }

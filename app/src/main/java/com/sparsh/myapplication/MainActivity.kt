@@ -234,6 +234,10 @@ class MainActivity : ComponentActivity() {
                             modifier = if (currentTab == 4) Modifier.fillMaxSize() else Modifier.size(0.dp)
                         ) {
                             SettingsScreen(
+                                bookingRepository = bookingRepository,
+                                onRestored = { restoredBookings ->
+                                    bookings.value = restoredBookings
+                                },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
