@@ -43,10 +43,12 @@ import com.sparsh.myapplication.Booking
 import com.sparsh.myapplication.BookingItem
 import com.sparsh.myapplication.PaymentDetail
 import com.sparsh.myapplication.getRoomCategory
+import com.sparsh.myapplication.getRoomsForCategory
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -985,47 +987,126 @@ fun QuickBookDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Category Badge (Room)
+                                val itemCategory = if (item.category.isNotBlank()) item.category else "Room"
                                 Card(
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.primaryContainer
                                     ),
                                     shape = RoundedCornerShape(6.dp),
-                                    modifier = Modifier.width(60.dp)
+                                    modifier = Modifier.width(90.dp)
                                 ) {
                                     Text(
-                                        text = "Room",
+                                        text = itemCategory,
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
-                                        textAlign = TextAlign.Center
+                                            .padding(vertical = 4.dp, horizontal = 4.dp),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
-                                // Room Number field
+                                // Room Number field (Dropdown)
                                 val hasNoErr = roomNoErrors[item.id]
-                                OutlinedTextField(
-                                    value = item.roomNumber,
-                                    onValueChange = { newRoomNo ->
-                                        val index = dialogRoomItems.indexOf(item)
-                                        if (index != -1) {
-                                            val newList = dialogRoomItems.toMutableList()
-                                            newList[index] = item.copy(roomNumber = newRoomNo)
-                                            dialogRoomItems = newList
+                                var dropdownExpanded by remember { mutableStateOf(false) }
+                                
+                                val allRoomsForCat = getRoomsForCategory(itemCategory)
+                                val availableRooms = remember(allRoomsForCat, bookings, dialogRoomItems) {
+                                    allRoomsForCat.filter { room ->
+                                        val isBookedElsewhere = bookings.any { b ->
+                                            b.id != (bookingToEdit?.id ?: "") && 
+                                            b.checkInDate == date && 
+                                            b.items.any { bi -> bi.roomNumber == room }
                                         }
-                                        if (newRoomNo.trim().isNotEmpty()) {
-                                            roomNoErrors = roomNoErrors - item.id
+                                        val isSelectedByOtherItem = dialogRoomItems.any { other ->
+                                            other.id != item.id && other.roomNumber == room
                                         }
-                                    },
-                                    isError = hasNoErr != null,
-                                    supportingText = hasNoErr?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                    placeholder = { Text("Room No", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
+                                        !isBookedElsewhere && !isSelectedByOtherItem
+                                    }
+                                }
+
+                                Box(modifier = Modifier.weight(1.2f)) {
+                                    OutlinedCard(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(52.dp)
+                                            .clickable { dropdownExpanded = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surface
+                                        ),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = if (hasNoErr != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (item.roomNumber.isNotBlank()) "Room ${item.roomNumber}" else "Assign Room",
+                                                fontSize = 13.sp,
+                                                fontWeight = if (item.roomNumber.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (item.roomNumber.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.KeyboardArrowDown,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    DropdownMenu(
+                                        expanded = dropdownExpanded,
+                                        onDismissRequest = { dropdownExpanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Unassigned") },
+                                            onClick = {
+                                                val index = dialogRoomItems.indexOf(item)
+                                                if (index != -1) {
+                                                    val newList = dialogRoomItems.toMutableList()
+                                                    newList[index] = item.copy(roomNumber = "")
+                                                    dialogRoomItems = newList
+                                                }
+                                                dropdownExpanded = false
+                                            }
+                                        )
+                                        if (availableRooms.isEmpty() && item.roomNumber.isBlank()) {
+                                            DropdownMenuItem(
+                                                text = { Text("No available rooms") },
+                                                onClick = {},
+                                                enabled = false
+                                            )
+                                        } else {
+                                            availableRooms.forEach { room ->
+                                                DropdownMenuItem(
+                                                    text = { Text("Room $room") },
+                                                    onClick = {
+                                                        val index = dialogRoomItems.indexOf(item)
+                                                        if (index != -1) {
+                                                            val newList = dialogRoomItems.toMutableList()
+                                                            newList[index] = item.copy(roomNumber = room)
+                                                            dialogRoomItems = newList
+                                                        }
+                                                        roomNoErrors = roomNoErrors - item.id
+                                                        dropdownExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // Rate field
                                 val currentRateStr = dialogItemRatesMap[item.id] ?: ""
