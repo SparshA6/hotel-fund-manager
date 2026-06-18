@@ -24,6 +24,8 @@ import com.sparsh.myapplication.ui.AddBookingScreen
 import com.sparsh.myapplication.ui.DashboardScreen
 import com.sparsh.myapplication.ui.SearchScreen
 import com.sparsh.myapplication.ui.QuickBookDialog
+import com.sparsh.myapplication.ui.AddUnassignedBookingDialog
+
 import com.sparsh.myapplication.ui.BookingsScreen
 import com.sparsh.myapplication.ui.SettingsScreen
 import com.sparsh.myapplication.ui.theme.MyApplicationTheme
@@ -243,28 +245,42 @@ class MainActivity : ComponentActivity() {
                         }
 
                         if (bookingToEdit != null) {
-                            QuickBookDialog(
-                                date = bookingToEdit!!.checkInDate,
-                                roomNumber = bookingToEdit!!.items.firstOrNull()?.roomNumber ?: "",
-                                bookings = bookings.value,
-                                bookingToEdit = bookingToEdit,
-                                isDormMode = bookingToEdit!!.items.any { it.category == "Dorm" || it.category == "Dorm Bed" },
-                                onDismiss = { bookingToEdit = null },
-                                onConfirm = { updatedBooking ->
-                                    coroutineScope.launch {
-                                        bookingRepository.saveBooking(updatedBooking)
-                                        bookings.value = bookingRepository.getBookings()
+                            if (bookingToEdit!!.isAssigned) {
+                                QuickBookDialog(
+                                    date = bookingToEdit!!.checkInDate,
+                                    roomNumber = bookingToEdit!!.items.firstOrNull()?.roomNumber ?: "",
+                                    bookings = bookings.value,
+                                    bookingToEdit = bookingToEdit,
+                                    isDormMode = bookingToEdit!!.items.any { it.category == "Dorm" || it.category == "Dorm Bed" },
+                                    onDismiss = { bookingToEdit = null },
+                                    onConfirm = { updatedBooking ->
+                                        coroutineScope.launch {
+                                            bookingRepository.saveBooking(updatedBooking)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                        bookingToEdit = null
+                                    },
+                                    onDelete = { id ->
+                                        coroutineScope.launch {
+                                            bookingRepository.deleteBooking(id)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                        bookingToEdit = null
                                     }
-                                    bookingToEdit = null
-                                },
-                                onDelete = { id ->
-                                    coroutineScope.launch {
-                                        bookingRepository.deleteBooking(id)
-                                        bookings.value = bookingRepository.getBookings()
+                                )
+                            } else {
+                                AddUnassignedBookingDialog(
+                                    bookingToEdit = bookingToEdit,
+                                    onDismiss = { bookingToEdit = null },
+                                    onConfirm = { updatedBooking ->
+                                        coroutineScope.launch {
+                                            bookingRepository.saveBooking(updatedBooking)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                        bookingToEdit = null
                                     }
-                                    bookingToEdit = null
-                                }
-                            )
+                                )
+                            }
                         }
 
                         if (isLoading) {
