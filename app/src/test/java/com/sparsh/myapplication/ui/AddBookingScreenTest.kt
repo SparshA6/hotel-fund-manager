@@ -38,7 +38,7 @@ class AddBookingScreenTest {
         val bookings = emptyList<Booking>()
         
         // Let's allocate 4 beds in Dorm Room A
-        val counts = getDormBedBookingCounts(date, "A", bookings, null)
+        val counts = getDormBedBookingCounts(date, 1, "A", bookings, null)
         val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
         val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
             compareBy({ counts[it] ?: 0 }, { it })
@@ -79,7 +79,7 @@ class AddBookingScreenTest {
         )
         
         // Let's allocate 4 beds in Dorm Room A
-        val counts = getDormBedBookingCounts(date, "A", mockBookings, null)
+        val counts = getDormBedBookingCounts(date, 1, "A", mockBookings, null)
         val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
         val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
             compareBy({ counts[it] ?: 0 }, { it })
@@ -172,7 +172,7 @@ class AddBookingScreenTest {
         // Beds with lowest bookings (count=1) are: A1, A3, A6, A7.
         // In ascending order: A1, A3, A6, A7.
         // We need 3 beds, so we expect A1, A3, A6.
-        val counts = getDormBedBookingCounts(date, "A", mockBookings, null)
+        val counts = getDormBedBookingCounts(date, 1, "A", mockBookings, null)
         val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
         val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
             compareBy({ counts[it] ?: 0 }, { it })
@@ -190,5 +190,46 @@ class AddBookingScreenTest {
         val result = assignedBeds.sorted().map { "A$it" }
         
         assertEquals(listOf("A1", "A3", "A6"), result)
+    }
+
+    @Test
+    fun testGetRoomNumberForNight_singleRoom() {
+        val room = com.sparsh.myapplication.getRoomNumberForNight("101", 0)
+        assertEquals("101", room)
+        val room2 = com.sparsh.myapplication.getRoomNumberForNight("101", 1)
+        assertEquals("101", room2)
+    }
+
+    @Test
+    fun testGetRoomNumberForNight_multipleRooms() {
+        val room = com.sparsh.myapplication.getRoomNumberForNight("101,102,103", 0)
+        assertEquals("101", room)
+        val room2 = com.sparsh.myapplication.getRoomNumberForNight("101,102,103", 1)
+        assertEquals("102", room2)
+        val room3 = com.sparsh.myapplication.getRoomNumberForNight("101,102,103", 2)
+        assertEquals("103", room3)
+        val room4 = com.sparsh.myapplication.getRoomNumberForNight("101,102,103", 3)
+        assertEquals("101", room4) // fall back to first
+    }
+
+    @Test
+    fun testRoomConflictExists_noConflict() {
+        // Different dates
+        val conflict1 = com.sparsh.myapplication.roomConflictExists("2026-06-15", 2, "101,102", "2026-06-17", 1, "101")
+        assertEquals(false, conflict1)
+
+        // Different rooms on same date
+        val conflict2 = com.sparsh.myapplication.roomConflictExists("2026-06-15", 2, "101,102", "2026-06-16", 1, "101")
+        // Date overlap: June 16. room1 on night 1 (June 16) is 102. room2 on night 0 (June 16) is 101.
+        // So no conflict on June 16 because r1 is 102 and r2 is 101.
+        assertEquals(false, conflict2)
+    }
+
+    @Test
+    fun testRoomConflictExists_withConflict() {
+        // Same room on overlapping date
+        val conflict = com.sparsh.myapplication.roomConflictExists("2026-06-15", 2, "101,102", "2026-06-16", 1, "102")
+        // Date overlap: June 16. room1 on night 1 (June 16) is 102. room2 on night 0 (June 16) is 102.
+        assertEquals(true, conflict)
     }
 }

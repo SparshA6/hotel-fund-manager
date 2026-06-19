@@ -2,30 +2,149 @@ package com.sparsh.myapplication
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import java.util.UUID
+
+fun getStayDate(checkInDate: String, offsetDays: Int): String {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = Calendar.getInstance()
+        val date = parser.parse(checkInDate)
+        if (date != null) {
+            cal.time = date
+            cal.add(Calendar.DAY_OF_MONTH, offsetDays)
+            parser.format(cal.time)
+        } else {
+            checkInDate
+        }
+    } catch (e: Exception) {
+        checkInDate
+    }
+}
+
+fun datesOverlap(date1: String, nights1: Int, date2: String, nights2: Int): Boolean {
+    val len1 = if (nights1 > 0) nights1 else 1
+    val len2 = if (nights2 > 0) nights2 else 1
+    val dates1 = (0 until len1).map { getStayDate(date1, it) }.toSet()
+    val dates2 = (0 until len2).map { getStayDate(date2, it) }.toSet()
+    return dates1.intersect(dates2).isNotEmpty()
+}
+
+fun getDateOffset(startDate: String, currentDate: String): Int {
+    return try {
+        val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val start = parser.parse(startDate)
+        val current = parser.parse(currentDate)
+        if (start != null && current != null) {
+            val diffMs = current.time - start.time
+            val diffDays = diffMs.toDouble() / (1000 * 60 * 60 * 24)
+            kotlin.math.round(diffDays).toInt()
+        } else {
+            0
+        }
+    } catch (e: Exception) {
+        0
+    }
+}
+
+fun getRoomNumberForNight(roomNumber: String, offset: Int): String {
+    if (roomNumber.isBlank()) return ""
+    val parts = roomNumber.split(",")
+    return parts.getOrNull(offset) ?: parts.firstOrNull() ?: ""
+}
+
+fun roomConflictExists(checkIn1: String, nights1: Int, roomNumber1: String, checkIn2: String, nights2: Int, roomNumber2: String): Boolean {
+    val len1 = if (nights1 > 0) nights1 else 1
+    val len2 = if (nights2 > 0) nights2 else 1
+    for (i in 0 until len1) {
+        val date1 = getStayDate(checkIn1, i)
+        val r1 = getRoomNumberForNight(roomNumber1, i)
+        if (r1.isBlank()) continue
+        
+        for (j in 0 until len2) {
+            val date2 = getStayDate(checkIn2, j)
+            val r2 = getRoomNumberForNight(roomNumber2, j)
+            if (r2.isBlank()) continue
+            
+            if (date1 == date2 && r1 == r2) {
+                return true
+            }
+        }
+    }
+    return false
+}
 
 data class BookingItem(
     val id: String = UUID.randomUUID().toString(),
     val category: String, // E.g., "Room", "Dorm", or room categories "Standard", "Deluxe", "Double", "Family", "Deluxe Family", "Dorm Bed"
     val roomNumber: String = "", // empty if unassigned, e.g., "101"
-    val amount: Double
+    val amount: Double,
+    val nights: Int = 1,
+    val rates: List<Double> = emptyList()
 ) {
     fun toJsonObject(): JSONObject {
         val json = JSONObject()
         json.put("id", id)
-        json.put("category", category)
+        val ratesStr = rates.joinToString(",") { it.toString() }
+        val encodedCategory = "$category|$nights|$ratesStr"
+        json.put("category", encodedCategory)
         json.put("roomNumber", if (roomNumber.isBlank()) " " else roomNumber)
         json.put("amount", amount)
+        json.put("nights", nights)
+        val ratesArray = JSONArray()
+        rates.forEach { ratesArray.put(it) }
+        json.put("rates", ratesArray)
         return json
     }
 
     companion object {
         fun fromJsonObject(json: JSONObject): BookingItem {
+            val rawCategory = json.getString("category")
+            var categoryVal = rawCategory
+            var nightsVal = json.optInt("nights", 1)
+            val ratesList = mutableListOf<Double>()
+
+            if (rawCategory.contains("|")) {
+                val parts = rawCategory.split("|")
+                categoryVal = parts[0]
+                if (parts.size > 1) {
+                    nightsVal = parts[1].toIntOrNull() ?: nightsVal
+                }
+                if (parts.size > 2 && parts[2].isNotEmpty()) {
+                    val rateParts = parts[2].split(",")
+                    ratesList.clear()
+                    rateParts.forEach {
+                        it.toDoubleOrNull()?.let { r -> ratesList.add(r) }
+                    }
+                }
+            }
+
+            if (ratesList.isEmpty()) {
+                if (json.has("rates")) {
+                    val arr = json.getJSONArray("rates")
+                    for (i in 0 until arr.length()) {
+                        ratesList.add(arr.getDouble(i))
+                    }
+                } else {
+                    val baseAmount = json.optDouble("amount", 0.0)
+                    if (nightsVal > 0) {
+                        val ratePerNight = baseAmount / nightsVal
+                        repeat(nightsVal) {
+                            ratesList.add(ratePerNight)
+                        }
+                    }
+                }
+            }
+
             return BookingItem(
                 id = json.optString("id", UUID.randomUUID().toString()),
-                category = json.getString("category"),
+                category = categoryVal,
                 roomNumber = json.optString("roomNumber", "").let { if (it.isBlank()) "" else it },
-                amount = json.getDouble("amount")
+                amount = json.getDouble("amount"),
+                nights = nightsVal,
+                rates = ratesList
             )
         }
     }
@@ -240,4 +359,14 @@ fun getRoomsForCategory(category: String): List<String> {
         "Double" -> allRooms.filter { it.endsWith("6") }
         else -> emptyList()
     }
+}
+
+fun adjustRatesList(rates: List<String>, targetSize: Int): List<String> {
+    val result = rates.toMutableList()
+    if (result.size < targetSize) {
+        repeat(targetSize - result.size) { result.add("") }
+    } else if (result.size > targetSize) {
+        return result.take(targetSize)
+    }
+    return result
 }

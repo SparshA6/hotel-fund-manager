@@ -90,7 +90,9 @@ const BookingItemSchema = new mongoose.Schema({
   id: { type: String, required: true },
   category: { type: String, required: true },
   roomNumber: { type: String, default: "" },
-  amount: { type: Number, required: true }
+  amount: { type: Number, required: true },
+  nights: { type: Number, default: 1 },
+  rates: [{ type: Number }]
 });
 
 const PaymentDetailSchema = new mongoose.Schema({
@@ -127,7 +129,7 @@ const BackupSchema = new mongoose.Schema({
   timestamp: { type: Number, required: true },
   displayDate: { type: String, required: true },
   bookingCount: { type: Number, required: true },
-  bookings: [BookingSchema]
+  bookings: { type: Array, default: [] }
 });
 
 const Backup = mongoose.model('Backup', BackupSchema);

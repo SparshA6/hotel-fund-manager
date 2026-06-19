@@ -44,6 +44,9 @@ import com.sparsh.myapplication.BookingItem
 import com.sparsh.myapplication.PaymentDetail
 import com.sparsh.myapplication.getRoomCategory
 import com.sparsh.myapplication.getRoomsForCategory
+import com.sparsh.myapplication.getStayDate
+import com.sparsh.myapplication.datesOverlap
+import com.sparsh.myapplication.adjustRatesList
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -258,13 +261,17 @@ fun AddBookingGridView(
     val bookingsLookup = remember(bookings) {
         val map = mutableMapOf<String, MutableMap<String, MutableList<Booking>>>()
         bookings.filter { it.isAssigned }.forEach { booking ->
-            val date = booking.checkInDate
             booking.items.forEach { item ->
                 val normalizedCat = if (isDormCategory(item.category)) "Dorm" else "Room"
-                val key = "$normalizedCat:${item.roomNumber}"
-                map.getOrPut(date) { mutableMapOf() }
-                   .getOrPut(key) { mutableListOf() }
-                   .add(booking)
+                val nightsCount = if (item.nights > 0) item.nights else 1
+                for (offset in 0 until nightsCount) {
+                    val stayDate = getStayDate(booking.checkInDate, offset)
+                    val roomNo = com.sparsh.myapplication.getRoomNumberForNight(item.roomNumber, offset)
+                    val key = "$normalizedCat:$roomNo"
+                    map.getOrPut(stayDate) { mutableMapOf() }
+                       .getOrPut(key) { mutableListOf() }
+                       .add(booking)
+                }
             }
         }
         map
@@ -541,10 +548,12 @@ fun AddBookingGridView(
                                                 modifier = Modifier.fillMaxSize(),
                                                 verticalArrangement = Arrangement.spacedBy(1.dp)
                                             ) {
-                bookingsForCell.forEach { booking ->
+                                                bookingsForCell.forEach { booking ->
+                                                    val offset = com.sparsh.myapplication.getDateOffset(booking.checkInDate, dateString)
                                                     val bookingItem = booking.items.find { 
                                                         val isItemDorm = isDormCategory(it.category)
-                                                        it.roomNumber == col && isItemDorm == isDormMode
+                                                        val itemRoom = com.sparsh.myapplication.getRoomNumberForNight(it.roomNumber, offset)
+                                                        itemRoom == col && isItemDorm == isDormMode
                                                     }
                                                     if (bookingItem != null) {
                                                         val isPending = booking.paymentStatus == "Pending"
@@ -571,8 +580,13 @@ fun AddBookingGridView(
                                                                 .padding(horizontal = 2.dp),
                                                             contentAlignment = Alignment.Center
                                                         ) {
+                                                            val displayRate = if (bookingItem.rates.isNotEmpty()) {
+                                                                bookingItem.rates.getOrNull(offset) ?: (bookingItem.amount / (if (bookingItem.nights > 0) bookingItem.nights else 1))
+                                                            } else {
+                                                                bookingItem.amount / (if (bookingItem.nights > 0) bookingItem.nights else 1)
+                                                            }
                                                             Text(
-                                                                text = "₹${formatDouble(bookingItem.amount)}",
+                                                                text = "₹${formatDouble(displayRate)}",
                                                                 fontWeight = FontWeight.ExtraBold,
                                                                 fontSize = if (bookingsForCell.size > 1) 9.sp else 11.sp,
                                                                 color = colors.second,
@@ -686,13 +700,21 @@ fun QuickBookDialog(
     var newPaymentAmountStr by remember { mutableStateOf("") }
     var newPaymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
 
+    var bookingNights by remember { mutableStateOf(1) }
+    var samePriceForAllNights by remember { mutableStateOf(true) }
+
+    var itemNightsMap by remember { mutableStateOf(mapOf<String, Int>()) }
+    var itemSamePriceMap by remember { mutableStateOf(mapOf<String, Boolean>()) }
+    var itemRatesMap by remember { mutableStateOf(mapOf<String, List<String>>()) }
+
+    var dormNights by remember { mutableStateOf(1) }
+    var dormSamePrice by remember { mutableStateOf(true) }
+    var dormRates by remember { mutableStateOf(listOf("")) }
+
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
     var dialogRoomItems by remember { mutableStateOf(listOf<BookingItem>()) }
-    var dialogItemRatesMap by remember { mutableStateOf(mapOf<String, String>()) }
-    var totalDormPriceStr by remember { mutableStateOf("") }
-
     var hasDormBooking by remember { mutableStateOf(false) }
     var dormRoom by remember { mutableStateOf("A") }
     var dormBedCount by remember { mutableStateOf(1) }
@@ -729,19 +751,39 @@ fun QuickBookDialog(
             newPaymentAmountStr = ""
             newPaymentMethod = "UPI (Hotel Acc - GPay)"
 
+            val maxNights = bookingToEdit.items.map { it.nights }.maxOrNull() ?: 1
+            bookingNights = maxNights
+            samePriceForAllNights = bookingToEdit.items.all { item ->
+                item.rates.distinct().size <= 1
+            }
+
             // Populate Room category items
             dialogRoomItems = bookingToEdit.items.filter { isStandardRoomCategory(it.category) }
-            dialogItemRatesMap = dialogRoomItems.associate { it.id to (if (it.amount == 0.0) "" else formatDouble(it.amount)) }
+            
+            val newNightsMap = mutableMapOf<String, Int>()
+            val newSamePriceMap = mutableMapOf<String, Boolean>()
+            val newRatesMap = mutableMapOf<String, List<String>>()
+            dialogRoomItems.forEach { item ->
+                val itNights = if (item.nights > 0) item.nights else 1
+                newNightsMap[item.id] = itNights
+                val allRatesEqual = item.rates.distinct().size <= 1
+                newSamePriceMap[item.id] = allRatesEqual
+                newRatesMap[item.id] = if (allRatesEqual) {
+                    listOf(if (item.rates.isNotEmpty()) formatDouble(item.rates.first()) else (if (item.amount == 0.0) "" else formatDouble(item.amount / itNights)))
+                } else {
+                    item.rates.map { formatDouble(it) }
+                }
+            }
+            itemNightsMap = newNightsMap
+            itemSamePriceMap = newSamePriceMap
+            itemRatesMap = newRatesMap
 
             // Initialize total dorm price if there are dorm items
             val dormItems = bookingToEdit.items.filter { isDormCategory(it.category) }
-            val dormSum = dormItems.sumOf { it.amount }
-            totalDormPriceStr = if (dormSum == 0.0) "" else formatDouble(dormSum)
-
             if (dormItems.isNotEmpty()) {
                 hasDormBooking = true
-                val firstDormItem = dormItems.firstOrNull { it.roomNumber.isNotBlank() }
-                dormRoom = if (firstDormItem != null && firstDormItem.roomNumber.startsWith("B", ignoreCase = true)) "B" else "A"
+                val firstDormItem = dormItems.firstOrNull { it.roomNumber.isNotBlank() } ?: dormItems.first()
+                dormRoom = if (firstDormItem.roomNumber.startsWith("B", ignoreCase = true)) "B" else "A"
                 dormBedCount = dormItems.size
                 dormBedCountStr = dormItems.size.toString()
                 manualBedNoToggle = dormItems.any { it.roomNumber.isNotBlank() }
@@ -750,6 +792,26 @@ fun QuickBookDialog(
                     .map { it.substring(dormRoom.length) }
                     .sorted()
                     .joinToString(", ")
+                
+                val firstDorm = dormItems.first()
+                dormNights = if (firstDorm.nights > 0) firstDorm.nights else 1
+                val allDormRatesEqual = firstDorm.rates.distinct().size <= 1
+                dormSamePrice = allDormRatesEqual
+                
+                val dormSum = dormItems.sumOf { it.amount }
+                dormRates = if (allDormRatesEqual) {
+                    val dormAvgRate = if (firstDorm.rates.isNotEmpty()) {
+                        firstDorm.rates.first()
+                    } else {
+                        val beds = dormItems.size.coerceAtLeast(1)
+                        val nights = dormNights.coerceAtLeast(1)
+                        dormSum / beds / nights
+                    }
+                    val totalDormVal = dormAvgRate * dormNights * dormItems.size
+                    listOf(if (totalDormVal == 0.0) "" else formatDouble(totalDormVal))
+                } else {
+                    firstDorm.rates.map { formatDouble(it * dormItems.size) }
+                }
             } else {
                 hasDormBooking = false
                 dormRoom = if (isDormMode && roomNumber.isNotBlank()) {
@@ -761,6 +823,10 @@ fun QuickBookDialog(
                 dormBedCountStr = "1"
                 manualBedNoToggle = false
                 manualBedNoText = ""
+                
+                dormNights = 1
+                dormSamePrice = true
+                dormRates = listOf("")
             }
         } else {
             // New booking
@@ -779,6 +845,9 @@ fun QuickBookDialog(
             newPaymentAmountStr = ""
             newPaymentMethod = "UPI (Hotel Acc - GPay)"
 
+            bookingNights = 1
+            samePriceForAllNights = true
+
             // Initialize with the clicked room/bed
             if (isDormMode) {
                 hasDormBooking = true
@@ -788,7 +857,13 @@ fun QuickBookDialog(
                 manualBedNoToggle = false
                 manualBedNoText = roomNumber.substring(1)
                 dialogRoomItems = emptyList()
-                dialogItemRatesMap = emptyMap()
+                itemNightsMap = emptyMap()
+                itemSamePriceMap = emptyMap()
+                itemRatesMap = emptyMap()
+                
+                dormNights = 1
+                dormSamePrice = true
+                dormRates = listOf("")
             } else {
                 hasDormBooking = false
                 dormRoom = "A"
@@ -796,6 +871,10 @@ fun QuickBookDialog(
                 dormBedCountStr = "1"
                 manualBedNoToggle = false
                 manualBedNoText = ""
+                
+                dormNights = 1
+                dormSamePrice = true
+                dormRates = listOf("")
 
                 val initialItem = BookingItem(
                     id = UUID.randomUUID().toString(),
@@ -804,9 +883,10 @@ fun QuickBookDialog(
                     amount = 0.0
                 )
                 dialogRoomItems = listOf(initialItem)
-                dialogItemRatesMap = mapOf(initialItem.id to "")
+                itemNightsMap = mapOf(initialItem.id to 1)
+                itemSamePriceMap = mapOf(initialItem.id to true)
+                itemRatesMap = mapOf(initialItem.id to listOf(""))
             }
-            totalDormPriceStr = ""
         }
     }
 
@@ -923,8 +1003,128 @@ fun QuickBookDialog(
                     )
                 }
 
+                // Global Nights & Same Price Toggle
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Nights",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (platform == "Direct") {
+                                    Text(
+                                        text = "Default for new allocations",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        if (bookingNights > 1) {
+                                            bookingNights--
+                                            if (platform != "Direct") {
+                                                dialogRoomItems.forEach { item ->
+                                                    val curR = itemRatesMap[item.id] ?: listOf("")
+                                                    itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (samePriceForAllNights) 1 else bookingNights))
+                                                }
+                                                dormRates = adjustRatesList(dormRates, if (samePriceForAllNights) 1 else bookingNights)
+                                            }
+                                        }
+                                    },
+                                    enabled = bookingNights > 1,
+                                    modifier = Modifier.size(36.dp),
+                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Decrease nights")
+                                }
+                                
+                                Text(
+                                    text = bookingNights.toString(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                
+                                IconButton(
+                                    onClick = {
+                                        bookingNights++
+                                        if (platform != "Direct") {
+                                            dialogRoomItems.forEach { item ->
+                                                val curR = itemRatesMap[item.id] ?: listOf("")
+                                                itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (samePriceForAllNights) 1 else bookingNights))
+                                            }
+                                            dormRates = adjustRatesList(dormRates, if (samePriceForAllNights) 1 else bookingNights)
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp),
+                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                ) {
+                                    Icon(imageVector = Icons.Default.KeyboardArrowUp, contentDescription = "Increase nights")
+                                }
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Same price for all nights",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (platform == "Direct") {
+                                    Text(
+                                        text = "Default for new allocations",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = samePriceForAllNights,
+                                onCheckedChange = { checked ->
+                                    samePriceForAllNights = checked
+                                    if (platform != "Direct") {
+                                        dialogRoomItems.forEach { item ->
+                                            val curR = itemRatesMap[item.id] ?: listOf("")
+                                            itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (checked) 1 else bookingNights))
+                                        }
+                                        dormRates = adjustRatesList(dormRates, if (checked) 1 else bookingNights)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
                 // Total Dorm Price (if there is any Dorm item allocated)
-                val totalDormVal = totalDormPriceStr.toDoubleOrNull() ?: 0.0
+                val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                val dormRatesList = dormRates
+                val totalDormVal = if (hasDormBooking) {
+                    val rl = dormRatesList.map { it.toDoubleOrNull() ?: 0.0 }
+                    if (actualDormSamePrice) rl.firstOrNull() ?: 0.0 else rl.sum()
+                } else 0.0
                 val dormShareRate = if (dormBedCount > 0) totalDormVal / dormBedCount else 0.0
 
                 // Rooms list allocation fields
@@ -955,7 +1155,9 @@ fun QuickBookDialog(
                                             amount = 0.0
                                         )
                                         dialogRoomItems = dialogRoomItems + newItem
-                                        dialogItemRatesMap = dialogItemRatesMap + (newItem.id to "")
+                                        itemNightsMap = itemNightsMap + (newItem.id to bookingNights)
+                                        itemSamePriceMap = itemSamePriceMap + (newItem.id to samePriceForAllNights)
+                                        itemRatesMap = itemRatesMap + (newItem.id to adjustRatesList(emptyList(), if (samePriceForAllNights) 1 else bookingNights))
                                     },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
@@ -971,6 +1173,9 @@ fun QuickBookDialog(
                                             dormRoom = "A"
                                             manualBedNoToggle = false
                                             manualBedNoText = ""
+                                            dormNights = bookingNights
+                                            dormSamePrice = samePriceForAllNights
+                                            dormRates = adjustRatesList(emptyList(), if (samePriceForAllNights) 1 else bookingNights)
                                         },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
@@ -981,178 +1186,296 @@ fun QuickBookDialog(
                         }
 
                         dialogRoomItems.forEach { item ->
-                            Row(
+                            val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                            val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
+                            val ratesList = itemRatesMap[item.id] ?: listOf("")
+                            
+                            Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                // Category Badge (Room)
-                                val itemCategory = if (item.category.isNotBlank()) item.category else "Room"
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                                    ),
-                                    shape = RoundedCornerShape(6.dp),
-                                    modifier = Modifier.width(90.dp)
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = itemCategory,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp, horizontal = 4.dp),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Room Number field (Dropdown)
-                                val hasNoErr = roomNoErrors[item.id]
-                                var dropdownExpanded by remember { mutableStateOf(false) }
-                                
-                                val allRoomsForCat = getRoomsForCategory(itemCategory)
-                                val availableRooms = remember(allRoomsForCat, bookings, dialogRoomItems) {
-                                    allRoomsForCat.filter { room ->
-                                        val isBookedElsewhere = bookings.any { b ->
-                                            b.id != (bookingToEdit?.id ?: "") && 
-                                            b.checkInDate == date && 
-                                            b.items.any { bi -> bi.roomNumber == room }
-                                        }
-                                        val isSelectedByOtherItem = dialogRoomItems.any { other ->
-                                            other.id != item.id && other.roomNumber == room
-                                        }
-                                        !isBookedElsewhere && !isSelectedByOtherItem
-                                    }
-                                }
-
-                                Box(modifier = Modifier.weight(1.2f)) {
-                                    OutlinedCard(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(52.dp)
-                                            .clickable { dropdownExpanded = true },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surface
-                                        ),
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color = if (hasNoErr != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
-                                        )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 12.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                        // Category Badge (Room)
+                                        val itemCategory = if (item.category.isNotBlank()) item.category else "Room"
+                                        Card(
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                                            ),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.width(90.dp)
                                         ) {
                                             Text(
-                                                text = if (item.roomNumber.isNotBlank()) "Room ${item.roomNumber}" else "Assign Room",
-                                                fontSize = 13.sp,
-                                                fontWeight = if (item.roomNumber.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (item.roomNumber.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                text = itemCategory,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                                                textAlign = TextAlign.Center,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
-                                            Icon(
-                                                imageVector = Icons.Default.KeyboardArrowDown,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
                                         }
-                                    }
-                                    
-                                    DropdownMenu(
-                                        expanded = dropdownExpanded,
-                                        onDismissRequest = { dropdownExpanded = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Unassigned") },
-                                            onClick = {
-                                                val index = dialogRoomItems.indexOf(item)
-                                                if (index != -1) {
-                                                    val newList = dialogRoomItems.toMutableList()
-                                                    newList[index] = item.copy(roomNumber = "")
-                                                    dialogRoomItems = newList
+
+                                        // Room Number field (Dropdown)
+                                        val hasNoErr = roomNoErrors[item.id]
+                                        var dropdownExpanded by remember { mutableStateOf(false) }
+                                        
+                                        val allRoomsForCat = getRoomsForCategory(itemCategory)
+                                        val availableRooms = remember(allRoomsForCat, bookings, dialogRoomItems, itemNights) {
+                                            allRoomsForCat.filter { room ->
+                                                val isBookedElsewhere = bookings.any { b ->
+                                                    b.id != (bookingToEdit?.id ?: "") && 
+                                                    b.items.any { bi -> 
+                                                        bi.roomNumber == room && 
+                                                        datesOverlap(date, itemNights, b.checkInDate, bi.nights)
+                                                    }
                                                 }
-                                                dropdownExpanded = false
+                                                val isSelectedByOtherItem = dialogRoomItems.any { other ->
+                                                    other.id != item.id && other.roomNumber == room
+                                                }
+                                                !isBookedElsewhere && !isSelectedByOtherItem
                                             }
-                                        )
-                                        if (availableRooms.isEmpty() && item.roomNumber.isBlank()) {
-                                            DropdownMenuItem(
-                                                text = { Text("No available rooms") },
-                                                onClick = {},
-                                                enabled = false
-                                            )
-                                        } else {
-                                            availableRooms.forEach { room ->
+                                        }
+
+                                        Box(modifier = Modifier.weight(1.2f)) {
+                                            OutlinedCard(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(52.dp)
+                                                    .clickable { dropdownExpanded = true },
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surface
+                                                ),
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = if (hasNoErr != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                                )
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(horizontal = 12.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = if (item.roomNumber.isNotBlank()) "Room ${item.roomNumber}" else "Assign Room",
+                                                        fontSize = 13.sp,
+                                                        fontWeight = if (item.roomNumber.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (item.roomNumber.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                            
+                                            DropdownMenu(
+                                                expanded = dropdownExpanded,
+                                                onDismissRequest = { dropdownExpanded = false }
+                                            ) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Room $room") },
+                                                    text = { Text("Unassigned") },
                                                     onClick = {
                                                         val index = dialogRoomItems.indexOf(item)
                                                         if (index != -1) {
                                                             val newList = dialogRoomItems.toMutableList()
-                                                            newList[index] = item.copy(roomNumber = room)
+                                                            newList[index] = item.copy(roomNumber = "")
                                                             dialogRoomItems = newList
                                                         }
-                                                        roomNoErrors = roomNoErrors - item.id
                                                         dropdownExpanded = false
+                                                    }
+                                                )
+                                                if (availableRooms.isEmpty() && item.roomNumber.isBlank()) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("No available rooms") },
+                                                        onClick = {},
+                                                        enabled = false
+                                                    )
+                                                } else {
+                                                    availableRooms.forEach { room ->
+                                                        DropdownMenuItem(
+                                                            text = { Text("Room $room") },
+                                                            onClick = {
+                                                                val index = dialogRoomItems.indexOf(item)
+                                                                if (index != -1) {
+                                                                    val newList = dialogRoomItems.toMutableList()
+                                                                    newList[index] = item.copy(roomNumber = room)
+                                                                    dialogRoomItems = newList
+                                                                }
+                                                                roomNoErrors = roomNoErrors - item.id
+                                                                dropdownExpanded = false
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Delete button (show if there's more than 1 item combined)
+                                        val canDeleteRoom = (dialogRoomItems.size > 1) || hasDormBooking
+                                        if (canDeleteRoom) {
+                                            IconButton(
+                                                onClick = {
+                                                    dialogRoomItems = dialogRoomItems.filter { it.id != item.id }
+                                                    itemRatesMap = itemRatesMap - item.id
+                                                    itemNightsMap = itemNightsMap - item.id
+                                                    itemSamePriceMap = itemSamePriceMap - item.id
+                                                },
+                                                colors = IconButtonDefaults.iconButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.error
+                                                ),
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Remove Room",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // If Direct, show Nights stepper and Same Price Switch side by side
+                                    if (platform == "Direct") {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("Nights:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                IconButton(
+                                                    onClick = {
+                                                        val currentN = itemNightsMap[item.id] ?: bookingNights
+                                                        if (currentN > 1) {
+                                                            val newN = currentN - 1
+                                                            itemNightsMap = itemNightsMap + (item.id to newN)
+                                                            val rSame = itemSamePriceMap[item.id] ?: samePriceForAllNights
+                                                            val curR = itemRatesMap[item.id] ?: listOf("")
+                                                            itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (rSame) 1 else newN))
+                                                        }
+                                                    },
+                                                    enabled = itemNights > 1,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease", modifier = Modifier.size(16.dp))
+                                                }
+                                                Text(itemNights.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                IconButton(
+                                                    onClick = {
+                                                        val currentN = itemNightsMap[item.id] ?: bookingNights
+                                                        val newN = currentN + 1
+                                                        itemNightsMap = itemNightsMap + (item.id to newN)
+                                                        val rSame = itemSamePriceMap[item.id] ?: samePriceForAllNights
+                                                        val curR = itemRatesMap[item.id] ?: listOf("")
+                                                        itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (rSame) 1 else newN))
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase", modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                            
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("Same price for all nights:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Switch(
+                                                    checked = itemSamePrice,
+                                                    onCheckedChange = { checked ->
+                                                        itemSamePriceMap = itemSamePriceMap + (item.id to checked)
+                                                        val curR = itemRatesMap[item.id] ?: listOf("")
+                                                        itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (checked) 1 else itemNights))
                                                     }
                                                 )
                                             }
                                         }
                                     }
-                                }
 
-                                // Rate field
-                                val currentRateStr = dialogItemRatesMap[item.id] ?: ""
-                                val hasRateErr = roomRateErrors[item.id]
-                                OutlinedTextField(
-                                    value = currentRateStr,
-                                    onValueChange = { newRate ->
-                                        dialogItemRatesMap = dialogItemRatesMap + (item.id to newRate)
-                                        val index = dialogRoomItems.indexOf(item)
-                                        if (index != -1) {
-                                            val newList = dialogRoomItems.toMutableList()
-                                            newList[index] = item.copy(amount = newRate.toDoubleOrNull() ?: 0.0)
-                                            dialogRoomItems = newList
-                                        }
-                                        if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
-                                            roomRateErrors = roomRateErrors - item.id
-                                        }
-                                    },
-                                    isError = hasRateErr != null,
-                                    supportingText = hasRateErr?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                    placeholder = { Text("Rate", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    prefix = { Text("₹") },
-                                    modifier = Modifier.weight(1.2f),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(8.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-
-                                // Delete button (show if there's more than 1 item combined)
-                                val canDeleteRoom = (dialogRoomItems.size > 1) || hasDormBooking
-                                if (canDeleteRoom) {
-                                    IconButton(
-                                        onClick = {
-                                            dialogRoomItems = dialogRoomItems.filter { it.id != item.id }
-                                            dialogItemRatesMap = dialogItemRatesMap - item.id
-                                        },
-                                        colors = IconButtonDefaults.iconButtonColors(
-                                            contentColor = MaterialTheme.colorScheme.error
-                                        ),
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Remove Room",
-                                            modifier = Modifier.size(18.dp)
+                                    // Rate fields rendering
+                                    if (itemSamePrice) {
+                                        // 1 Rate field
+                                        val hasRateErr = roomRateErrors[item.id]
+                                        OutlinedTextField(
+                                            value = ratesList.firstOrNull() ?: "",
+                                            onValueChange = { newRate ->
+                                                val updatedList = ratesList.toMutableList()
+                                                if (updatedList.isEmpty()) updatedList.add(newRate) else updatedList[0] = newRate
+                                                itemRatesMap = itemRatesMap + (item.id to updatedList)
+                                                val index = dialogRoomItems.indexOf(item)
+                                                if (index != -1) {
+                                                    val newList = dialogRoomItems.toMutableList()
+                                                    newList[index] = item.copy(amount = (newRate.toDoubleOrNull() ?: 0.0) * itemNights)
+                                                    dialogRoomItems = newList
+                                                }
+                                                if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
+                                                    roomRateErrors = roomRateErrors - item.id
+                                                }
+                                            },
+                                            isError = hasRateErr != null,
+                                            supportingText = hasRateErr?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                            placeholder = { Text("Room Rate per Night") },
+                                            prefix = { Text("₹") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(8.dp),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                         )
+                                    } else {
+                                        // N Rate fields
+                                        Text("Enter rate for each night:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            for (nightIndex in 0 until itemNights) {
+                                                val rateValue = ratesList.getOrNull(nightIndex) ?: ""
+                                                val hasRateErr = roomRateErrors[item.id]
+                                                OutlinedTextField(
+                                                    value = rateValue,
+                                                    onValueChange = { newRate ->
+                                                        val updatedList = adjustRatesList(ratesList, itemNights).toMutableList()
+                                                        updatedList[nightIndex] = newRate
+                                                        itemRatesMap = itemRatesMap + (item.id to updatedList)
+                                                        val index = dialogRoomItems.indexOf(item)
+                                                        if (index != -1) {
+                                                            val newList = dialogRoomItems.toMutableList()
+                                                            newList[index] = item.copy(amount = updatedList.map { it.toDoubleOrNull() ?: 0.0 }.sum())
+                                                            dialogRoomItems = newList
+                                                        }
+                                                        if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
+                                                            roomRateErrors = roomRateErrors - item.id
+                                                        }
+                                                    },
+                                                    isError = hasRateErr != null,
+                                                    placeholder = { Text("Night ${nightIndex + 1} Rate") },
+                                                    prefix = { Text("₹") },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    singleLine = true,
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1297,6 +1620,60 @@ fun QuickBookDialog(
                                     }
                                 )
 
+                                // Direct-only Dorm Nights stepper & Same Price Switch
+                                if (platform == "Direct") {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text("Dorm Nights:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            IconButton(
+                                                onClick = {
+                                                    if (dormNights > 1) {
+                                                        dormNights--
+                                                        dormRates = adjustRatesList(dormRates, if (dormSamePrice) 1 else dormNights)
+                                                    }
+                                                },
+                                                enabled = dormNights > 1,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            }
+                                            Text(dormNights.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            IconButton(
+                                                onClick = {
+                                                    dormNights++
+                                                    dormRates = adjustRatesList(dormRates, if (dormSamePrice) 1 else dormNights)
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                        
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text("Same price:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Switch(
+                                                checked = dormSamePrice,
+                                                onCheckedChange = { checked ->
+                                                    dormSamePrice = checked
+                                                    dormRates = adjustRatesList(dormRates, if (checked) 1 else dormNights)
+                                                }
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                }
+
                                 // 3. Toggle for Manual Bed Numbers
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1321,7 +1698,7 @@ fun QuickBookDialog(
                                         onCheckedChange = { manualBedNoToggle = it }
                                     )
                                 }
-
+ 
                                 // 4. Manual Bed Numbers text field (if toggle active)
                                 if (manualBedNoToggle) {
                                     OutlinedTextField(
@@ -1359,25 +1736,59 @@ fun QuickBookDialog(
                         }
                     }
                 }
-
+ 
                 if (hasDormBooking) {
                     item {
-                        OutlinedTextField(
-                            value = totalDormPriceStr,
-                            onValueChange = { 
-                                totalDormPriceStr = it 
-                                if ((it.toDoubleOrNull() ?: 0.0) > 0.0) dormTotalAmountError = null
-                            },
-                            isError = dormTotalAmountError != null,
-                            supportingText = dormTotalAmountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                            label = { Text("Total Dorm Price") },
-                            placeholder = { Text("e.g. 1500") },
-                            prefix = { Text("₹ ") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
+                        val actualDormNights = if (platform == "Direct") dormNights else bookingNights
+                        val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                        val dormRatesList = dormRates
+                        
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (actualDormSamePrice) {
+                                OutlinedTextField(
+                                    value = dormRatesList.firstOrNull() ?: "",
+                                    onValueChange = { 
+                                        val updated = dormRatesList.toMutableList()
+                                        if (updated.isEmpty()) updated.add(it) else updated[0] = it
+                                        dormRates = updated
+                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) dormTotalAmountError = null
+                                    },
+                                    isError = dormTotalAmountError != null,
+                                    supportingText = dormTotalAmountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                    label = { Text("Total Dorm Beds Price (All Nights & Beds)") },
+                                    placeholder = { Text("e.g. 3000") },
+                                    prefix = { Text("₹ ") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                            } else {
+                                Text("Enter total dorm price (all beds) for each night:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                for (nightIndex in 0 until actualDormNights) {
+                                    val rateValue = dormRatesList.getOrNull(nightIndex) ?: ""
+                                    OutlinedTextField(
+                                        value = rateValue,
+                                        onValueChange = { newRate ->
+                                            val updated = adjustRatesList(dormRatesList, actualDormNights).toMutableList()
+                                            updated[nightIndex] = newRate
+                                            dormRates = updated
+                                            if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) dormTotalAmountError = null
+                                        },
+                                        isError = dormTotalAmountError != null,
+                                        placeholder = { Text("Night ${nightIndex + 1} Total Dorm Price (All Beds)") },
+                                        prefix = { Text("₹ ") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(10.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1424,7 +1835,7 @@ fun QuickBookDialog(
                 // Dynamic OTA Commission Calculation Display Label
                 if (platform != "Direct") {
                     item {
-                        val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + (totalDormPriceStr.toDoubleOrNull() ?: 0.0))
+                        val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + totalDormVal)
                         val totalBillValue = if (platform == "Direct" && isBillOn) {
                             billAmountStr.toDoubleOrNull() ?: calculatedSum
                         } else {
@@ -1578,7 +1989,7 @@ fun QuickBookDialog(
                                 color = MaterialTheme.colorScheme.primary
                             )
 
-                            val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + (totalDormPriceStr.toDoubleOrNull() ?: 0.0))
+                            val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + totalDormVal)
                             
                             val totalBillValue = if (platform == "Direct" && isBillOn) {
                                 billAmountStr.toDoubleOrNull() ?: calculatedSum
@@ -1848,13 +2259,23 @@ fun QuickBookDialog(
                     }
 
                     // 3. Validate Room items details
-                    dialogRoomItems.filter { it.category == "Room" }.forEach { item ->
+                    dialogRoomItems.forEach { item ->
                         if (item.roomNumber.trim().isEmpty()) {
                             newRoomNoErrors[item.id] = "Room number is required."
                         }
-                        val rateVal = dialogItemRatesMap[item.id]?.toDoubleOrNull() ?: 0.0
-                        if (rateVal <= 0.0) {
-                            newRoomRateErrors[item.id] = "Rate must be greater than 0."
+                        val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                        val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
+                        val ratesList = itemRatesMap[item.id] ?: listOf("")
+                        if (itemSamePrice) {
+                            val rateVal = ratesList.firstOrNull()?.toDoubleOrNull() ?: 0.0
+                            if (rateVal <= 0.0) {
+                                newRoomRateErrors[item.id] = "Rate must be greater than 0."
+                            }
+                        } else {
+                            val hasInvalidRate = ratesList.any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 } || ratesList.size < itemNights
+                            if (hasInvalidRate) {
+                                newRoomRateErrors[item.id] = "All night rates must be greater than 0."
+                            }
                         }
                     }
                     if (newRoomNoErrors.isNotEmpty() || newRoomRateErrors.isNotEmpty()) {
@@ -1879,13 +2300,28 @@ fun QuickBookDialog(
                         }
                         dormBedCount = bedCountVal
 
-                        val totalDormVal = totalDormPriceStr.toDoubleOrNull()
-                        if (totalDormVal == null || totalDormVal <= 0.0) {
-                            dormTotalAmountError = "Please enter a valid total dorm price."
-                            errorMessage = "Please enter a valid total dorm price."
-                            showError = true
-                            scrollToField("dormTotalAmount")
-                            return@Button
+                        val actualDormNights = if (platform == "Direct") dormNights else bookingNights
+                        val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                        val dormRatesList = dormRates
+                        
+                        if (actualDormSamePrice) {
+                            val totalDormVal = dormRatesList.firstOrNull()?.toDoubleOrNull()
+                            if (totalDormVal == null || totalDormVal <= 0.0) {
+                                dormTotalAmountError = "Please enter a valid total dorm price."
+                                errorMessage = "Please enter a valid total dorm price."
+                                showError = true
+                                scrollToField("dormTotalAmount")
+                                return@Button
+                            }
+                        } else {
+                            val hasInvalidRate = dormRatesList.any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 } || dormRatesList.size < actualDormNights
+                            if (hasInvalidRate) {
+                                dormTotalAmountError = "All night rates must be greater than 0."
+                                errorMessage = "All night rates must be greater than 0."
+                                showError = true
+                                scrollToField("dormTotalAmount")
+                                return@Button
+                            }
                         }
 
                         if (manualBedNoToggle) {
@@ -1928,7 +2364,7 @@ fun QuickBookDialog(
                         } else {
                             // Automatic allocation
                             // Find free beds, or sort by bookings count
-                            val counts = getDormBedBookingCounts(date, dormRoom, bookings, bookingToEdit?.id)
+                            val counts = getDormBedBookingCounts(date, actualDormNights, dormRoom, bookings, bookingToEdit?.id)
                             val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
                             val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
                                 compareBy( { counts[it] ?: 0 }, { it } )
@@ -1947,8 +2383,19 @@ fun QuickBookDialog(
                     }
 
                     // 4. Calculate final items allocation values
-                    val totalDormVal = totalDormPriceStr.toDoubleOrNull() ?: 0.0
-                    val dormShareRate = if (dormBedCount > 0) totalDormVal / dormBedCount else 0.0
+                    val actualDormNights = if (platform == "Direct") dormNights else bookingNights
+                    val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                    val dormRatesList = dormRates.map { it.toDoubleOrNull() ?: 0.0 }
+                    
+                    val dormShareRatesList = if (actualDormSamePrice) {
+                        val totalEntered = dormRatesList.firstOrNull() ?: 0.0
+                        val ratePerBedPerNight = totalEntered / (actualDormNights.coerceAtLeast(1) * dormBedCount.coerceAtLeast(1))
+                        List(actualDormNights) { ratePerBedPerNight }
+                    } else {
+                        dormRatesList.map { it / dormBedCount.coerceAtLeast(1) }
+                    }
+                    
+                    val totalDormVal = dormShareRatesList.sum() * dormBedCount
 
                     // Build Dorm booking items list
                     val dormBookingItems = if (hasDormBooking) {
@@ -1957,7 +2404,9 @@ fun QuickBookDialog(
                                 id = UUID.randomUUID().toString(),
                                 category = getRoomCategory(bedNo),
                                 roomNumber = bedNo,
-                                amount = dormShareRate
+                                amount = dormShareRatesList.sum(),
+                                nights = actualDormNights,
+                                rates = dormShareRatesList
                             )
                         }
                     } else {
@@ -1965,9 +2414,22 @@ fun QuickBookDialog(
                     }
 
                     val roomBookingItems = dialogRoomItems.map { item ->
+                        val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                        val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
+                        val ratesList = (itemRatesMap[item.id] ?: listOf("")).map { it.toDoubleOrNull() ?: 0.0 }
+                        
+                        val ratesPerNight = if (itemSamePrice) {
+                            val ratePerNight = ratesList.firstOrNull() ?: 0.0
+                            List(itemNights) { ratePerNight }
+                        } else {
+                            ratesList
+                        }
+                        
                         item.copy(
                             category = if (item.roomNumber.isNotBlank()) getRoomCategory(item.roomNumber) else item.category,
-                            amount = dialogItemRatesMap[item.id]?.toDoubleOrNull() ?: 0.0
+                            amount = ratesPerNight.sum(),
+                            nights = itemNights,
+                            rates = ratesPerNight
                         )
                     }
 
@@ -2155,9 +2617,20 @@ fun CellBookingsDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(bookingsForCell) { booking ->
+                            val offset = com.sparsh.myapplication.getDateOffset(booking.checkInDate, date)
                             val bookingItem = booking.items.find { 
                                 val isItemDorm = isDormCategory(it.category)
-                                it.roomNumber == roomNumber && isItemDorm == isDormMode
+                                val itemRoom = com.sparsh.myapplication.getRoomNumberForNight(it.roomNumber, offset)
+                                itemRoom == roomNumber && isItemDorm == isDormMode
+                            }
+                            val displayRate = if (bookingItem != null) {
+                                if (bookingItem.rates.isNotEmpty()) {
+                                    bookingItem.rates.getOrNull(offset) ?: (bookingItem.amount / (if (bookingItem.nights > 0) bookingItem.nights else 1))
+                                } else {
+                                    bookingItem.amount / (if (bookingItem.nights > 0) bookingItem.nights else 1)
+                                }
+                            } else {
+                                0.0
                             }
                             val isPending = booking.paymentStatus == "Pending"
                             val colors = getPlatformColors(booking.platform, isPending)
@@ -2186,15 +2659,16 @@ fun CellBookingsDialog(
                                             fontSize = 14.sp,
                                             color = colors.second
                                         )
+                                        val nightsSuffix = if (bookingItem != null && bookingItem.nights > 1) " • ${bookingItem.nights} nights" else ""
                                         Text(
-                                            text = "${booking.platform} • ${booking.paymentMethod}",
+                                            text = "${booking.platform} • ${booking.paymentMethod}$nightsSuffix",
                                             fontSize = 11.sp,
                                             color = colors.second.copy(alpha = 0.7f)
                                         )
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            text = "₹${bookingItem?.amount?.let { formatDouble(it) } ?: 0}",
+                                            text = "₹${formatDouble(displayRate)}",
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 15.sp,
                                             color = colors.second
@@ -2258,6 +2732,7 @@ fun parseBedNumbers(text: String, dormRoom: String): List<String> {
 
 fun getDormBedBookingCounts(
     date: String,
+    nights: Int,
     dormRoom: String,
     bookings: List<Booking>,
     excludeBookingId: String?
@@ -2267,19 +2742,22 @@ fun getDormBedBookingCounts(
         counts[i] = 0
     }
     
-    val activeBookings = bookings.filter { b ->
-        b.checkInDate == date && (excludeBookingId == null || b.id != excludeBookingId)
-    }
+    val requestedDates = (0 until (if (nights > 0) nights else 1)).map { getStayDate(date, it) }.toSet()
     
-    for (b in activeBookings) {
+    for (b in bookings) {
+        if (excludeBookingId != null && b.id == excludeBookingId) continue
         for (item in b.items) {
             if (isDormCategory(item.category)) {
-                val roomNum = item.roomNumber.trim()
-                if (roomNum.startsWith(dormRoom, ignoreCase = true)) {
-                    val bedIndexStr = roomNum.substring(dormRoom.length)
-                    val bedIndex = bedIndexStr.toIntOrNull()
-                    if (bedIndex != null && bedIndex in 1..8) {
-                        counts[bedIndex] = (counts[bedIndex] ?: 0) + 1
+                val itemNights = if (item.nights > 0) item.nights else 1
+                val itemDates = (0 until itemNights).map { getStayDate(b.checkInDate, it) }.toSet()
+                if (requestedDates.intersect(itemDates).isNotEmpty()) {
+                    val roomNum = item.roomNumber.trim()
+                    if (roomNum.startsWith(dormRoom, ignoreCase = true)) {
+                        val bedIndexStr = roomNum.substring(dormRoom.length)
+                        val bedIndex = bedIndexStr.toIntOrNull()
+                        if (bedIndex != null && bedIndex in 1..8) {
+                            counts[bedIndex] = (counts[bedIndex] ?: 0) + 1
+                        }
                     }
                 }
             }
