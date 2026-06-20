@@ -82,13 +82,18 @@ data class BookingItem(
     val roomNumber: String = "", // empty if unassigned, e.g., "101"
     val amount: Double,
     val nights: Int = 1,
-    val rates: List<Double> = emptyList()
+    val rates: List<Double> = emptyList(),
+    val startDate: String? = null
 ) {
     fun toJsonObject(): JSONObject {
         val json = JSONObject()
         json.put("id", id)
         val ratesStr = rates.joinToString(",") { it.toString() }
-        val encodedCategory = "$category|$nights|$ratesStr"
+        val encodedCategory = if (startDate != null && startDate.isNotBlank()) {
+            "$category|$nights|$ratesStr|$startDate"
+        } else {
+            "$category|$nights|$ratesStr"
+        }
         json.put("category", encodedCategory)
         json.put("roomNumber", if (roomNumber.isBlank()) " " else roomNumber)
         json.put("amount", amount)
@@ -96,6 +101,7 @@ data class BookingItem(
         val ratesArray = JSONArray()
         rates.forEach { ratesArray.put(it) }
         json.put("rates", ratesArray)
+        json.put("startDate", startDate ?: "")
         return json
     }
 
@@ -105,6 +111,7 @@ data class BookingItem(
             var categoryVal = rawCategory
             var nightsVal = json.optInt("nights", 1)
             val ratesList = mutableListOf<Double>()
+            var startDateVal: String? = json.optString("startDate", "").takeIf { it.isNotBlank() }
 
             if (rawCategory.contains("|")) {
                 val parts = rawCategory.split("|")
@@ -118,6 +125,9 @@ data class BookingItem(
                     rateParts.forEach {
                         it.toDoubleOrNull()?.let { r -> ratesList.add(r) }
                     }
+                }
+                if (parts.size > 3 && parts[3].isNotEmpty()) {
+                    startDateVal = parts[3]
                 }
             }
 
@@ -144,7 +154,8 @@ data class BookingItem(
                 roomNumber = json.optString("roomNumber", "").let { if (it.isBlank()) "" else it },
                 amount = json.getDouble("amount"),
                 nights = nightsVal,
-                rates = ratesList
+                rates = ratesList,
+                startDate = startDateVal
             )
         }
     }
@@ -357,6 +368,7 @@ fun getRoomsForCategory(category: String): List<String> {
         "Standard" -> allRooms.filter { it.endsWith("5") || it.endsWith("4II") }
         "Deluxe" -> allRooms.filter { it.endsWith("1") || it.endsWith("2") }
         "Double" -> allRooms.filter { it.endsWith("6") }
+        "Room", "Standard Room" -> allRooms
         else -> emptyList()
     }
 }

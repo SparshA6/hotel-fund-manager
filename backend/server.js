@@ -92,7 +92,8 @@ const BookingItemSchema = new mongoose.Schema({
   roomNumber: { type: String, default: "" },
   amount: { type: Number, required: true },
   nights: { type: Number, default: 1 },
-  rates: [{ type: Number }]
+  rates: [{ type: Number }],
+  startDate: { type: String, default: "" }
 });
 
 const PaymentDetailSchema = new mongoose.Schema({

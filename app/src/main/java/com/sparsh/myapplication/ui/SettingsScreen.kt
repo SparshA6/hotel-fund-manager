@@ -1,5 +1,6 @@
 package com.sparsh.myapplication.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,6 +54,7 @@ fun SettingsScreen(
             backups = bookingRepository.getBackups()
         } catch (e: Exception) {
             e.printStackTrace()
+            Toast.makeText(context, "Failed to load backups: ${e.message}", Toast.LENGTH_LONG).show()
         } finally {
             isLoadingBackups = false
         }
@@ -285,6 +287,7 @@ fun SettingsScreen(
                                             backups = bookingRepository.getBackups()
                                         } catch (e: Exception) {
                                             e.printStackTrace()
+                                            Toast.makeText(context, "Failed to load backups: ${e.message}", Toast.LENGTH_LONG).show()
                                         } finally {
                                             isLoadingBackups = false
                                         }
@@ -313,9 +316,11 @@ fun SettingsScreen(
                                     operationMessage = "Creating cloud backup..."
                                     try {
                                         bookingRepository.createBackup()
+                                        Toast.makeText(context, "Backup created successfully!", Toast.LENGTH_SHORT).show()
                                         backups = bookingRepository.getBackups()
                                     } catch (e: Exception) {
                                         e.printStackTrace()
+                                        Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_LONG).show()
                                     } finally {
                                         isOperating = false
                                     }
@@ -464,8 +469,10 @@ fun SettingsScreen(
                             try {
                                 val restoredList = bookingRepository.restoreBackupAndSync(backupId)
                                 onRestored(restoredList)
+                                Toast.makeText(context, "Backup restored successfully!", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 e.printStackTrace()
+                                Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
                             } finally {
                                 isOperating = false
                             }
@@ -501,9 +508,11 @@ fun SettingsScreen(
                             operationMessage = "Deleting cloud backup..."
                             try {
                                 bookingRepository.deleteBackupFromServer(backupId)
+                                Toast.makeText(context, "Backup deleted successfully!", Toast.LENGTH_SHORT).show()
                                 backups = bookingRepository.getBackups()
                             } catch (e: Exception) {
                                 e.printStackTrace()
+                                Toast.makeText(context, "Delete failed: ${e.message}", Toast.LENGTH_LONG).show()
                             } finally {
                                 isOperating = false
                             }

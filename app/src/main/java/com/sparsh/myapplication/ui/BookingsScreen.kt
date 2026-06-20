@@ -60,7 +60,8 @@ data class BookingAllocationInput(
     val dormBedsCount: Int = 1,
     val nights: Int = 1,
     val samePrice: Boolean = true,
-    val rates: List<String> = emptyList()
+    val rates: List<String> = emptyList(),
+    val startDate: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -470,6 +471,9 @@ fun AddUnassignedBookingDialog(
     var newPaymentAmountStr by remember { mutableStateOf("") }
     var newPaymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
     var advancePaymentMethod by remember(bookingToEdit) { mutableStateOf("UPI (Hotel Acc - GPay)") }
+    var newPaymentDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    var advancePaymentIsUnknown by remember(bookingToEdit) { mutableStateOf(false) }
+    var newPaymentIsUnknown by remember(bookingToEdit) { mutableStateOf(false) }
 
     var bookingNights by remember(bookingToEdit) {
         mutableStateOf(bookingToEdit?.items?.map { it.nights }?.maxOrNull() ?: 1)
@@ -493,7 +497,8 @@ fun AddUnassignedBookingDialog(
                     dormBedsCount = 1,
                     nights = if (item.nights > 0) item.nights else 1,
                     samePrice = allRatesEqual,
-                    rates = item.rates.map { formatDouble(it) }
+                    rates = item.rates.map { formatDouble(it) },
+                    startDate = item.startDate
                 )
             }
             val dormItems = bookingToEdit.items.filter { it.category == "Dorm Bed" }
@@ -521,7 +526,8 @@ fun AddUnassignedBookingDialog(
                         dormBedsCount = dormItems.size,
                         nights = if (firstDorm.nights > 0) firstDorm.nights else 1,
                         samePrice = allDormRatesEqual,
-                        rates = combinedRates
+                        rates = combinedRates,
+                        startDate = firstDorm.startDate
                     )
                 )
             } else {
@@ -570,7 +576,10 @@ fun AddUnassignedBookingDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.98f),
+        modifier = Modifier
+            .fillMaxWidth(0.98f)
+            .navigationBarsPadding()
+            .imePadding(),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
@@ -933,6 +942,57 @@ fun AddUnassignedBookingDialog(
                                         }
                                     }
 
+                                    val itemStartDate = item.startDate.takeIf { !it.isNullOrBlank() } ?: checkInDate
+                                    val itemDateFormatted = try {
+                                        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                        val formatter = SimpleDateFormat("dd/MM", Locale.US)
+                                        val d = parser.parse(itemStartDate)
+                                        if (d != null) formatter.format(d) else itemStartDate
+                                    } catch (e: Exception) {
+                                        itemStartDate
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .clickable {
+                                                val cal = Calendar.getInstance().apply {
+                                                    try {
+                                                        time = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(itemStartDate) ?: Date()
+                                                    } catch (e: Exception) {}
+                                                }
+                                                DatePickerDialog(
+                                                    context,
+                                                    { _, y, m, dOfMonth ->
+                                                        val selectedCal = Calendar.getInstance()
+                                                        selectedCal.set(y, m, dOfMonth)
+                                                        val newDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(selectedCal.time)
+                                                        selectedAllocations = selectedAllocations.map { alloc ->
+                                                            if (alloc.id == item.id) alloc.copy(startDate = newDateStr) else alloc
+                                                        }
+                                                    },
+                                                    cal.get(Calendar.YEAR),
+                                                    cal.get(Calendar.MONTH),
+                                                    cal.get(Calendar.DAY_OF_MONTH)
+                                                ).show()
+                                            }
+                                            .padding(vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DateRange,
+                                            contentDescription = "Change Start Date",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Starts: $itemDateFormatted",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
                                     // If Direct, show Nights stepper and Same Price Switch side by side
                                     val itemNights = if (platform == "Direct") item.nights else bookingNights
                                     val itemSamePrice = if (platform == "Direct") item.samePrice else samePriceForAllNights
@@ -1121,49 +1181,69 @@ fun AddUnassignedBookingDialog(
                                 )
                                 
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("Advance Payment Method", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                
-                                val methodList = listOf(
-                                    "UPI (Hotel Acc - GPay)",
-                                    "UPI (Sparsh Acc - GPay)",
-                                    "UPI (Meenu - PhonePe)",
-                                    "UPI (Shop - HDFC)",
-                                    "Cash",
-                                    "Card",
-                                    "Bank Transfer"
-                                )
-                                methodList.chunked(3).forEach { rowMethods ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        rowMethods.forEach { method ->
-                                            val isSel = advancePaymentMethod == method
-                                            ElevatedCard(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(28.dp)
-                                                    .clickable { advancePaymentMethod = method },
-                                                shape = RoundedCornerShape(6.dp),
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                                )
-                                            ) {
-                                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                    Text(
-                                                        text = method,
-                                                        fontSize = 8.sp,
-                                                        color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable { advancePaymentIsUnknown = !advancePaymentIsUnknown }
+                                ) {
+                                    Checkbox(
+                                        checked = advancePaymentIsUnknown,
+                                        onCheckedChange = { advancePaymentIsUnknown = it }
+                                    )
+                                    Text(
+                                        text = "Unknown Advance Payment (Date & Mode do not matter)",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                if (!advancePaymentIsUnknown) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Advance Payment Method", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    
+                                    val methodList = listOf(
+                                        "UPI (Hotel Acc - GPay)",
+                                        "UPI (Sparsh Acc - GPay)",
+                                        "UPI (Meenu - PhonePe)",
+                                        "UPI (Shop - HDFC)",
+                                        "Cash",
+                                        "Card",
+                                        "Bank Transfer"
+                                    )
+                                    methodList.chunked(3).forEach { rowMethods ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            rowMethods.forEach { method ->
+                                                val isSel = advancePaymentMethod == method
+                                                ElevatedCard(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(28.dp)
+                                                        .clickable { advancePaymentMethod = method },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                                     )
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = method,
+                                                            fontSize = 8.sp,
+                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1
+                                                        )
+                                                    }
                                                 }
                                             }
-                                        }
-                                        if (rowMethods.size < 3) {
-                                            repeat(3 - rowMethods.size) {
-                                                Spacer(modifier = Modifier.weight(1f))
+                                            if (rowMethods.size < 3) {
+                                                repeat(3 - rowMethods.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
                                             }
                                         }
                                     }
@@ -1180,20 +1260,29 @@ fun AddUnassignedBookingDialog(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                     )
                                 } else {
-                                    dialogPayments.forEach { p ->
+                                    dialogPayments.sortedBy { it.timestamp }.forEach { p ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            val pDateFormatted = if (p.timestamp == 0L) "Unknown Date" else SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(p.timestamp))
+                                            val pMethodStr = if (p.method == "Unknown") "Unknown Mode" else p.method
                                             Text(
-                                                text = "₹${formatDouble(p.amount)} via ${p.method}",
+                                                text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted",
                                                 fontSize = 12.sp,
                                                 style = MaterialTheme.typography.bodySmall
                                             )
                                             IconButton(
                                                 onClick = {
-                                                    dialogPayments = dialogPayments.filter { it.id != p.id }
+                                                    val updatedPayments = dialogPayments.filter { it.id != p.id }
+                                                    dialogPayments = updatedPayments
+                                                    if (bookingToEdit != null) {
+                                                        val updatedBooking = bookingToEdit.copy(
+                                                            payments = updatedPayments
+                                                        )
+                                                        onConfirm(updatedBooking)
+                                                    }
                                                 },
                                                 modifier = Modifier.size(24.dp)
                                             ) {
@@ -1228,6 +1317,25 @@ fun AddUnassignedBookingDialog(
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                     Text("Record Additional Payment", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth().clickable { newPaymentIsUnknown = !newPaymentIsUnknown }
+                                    ) {
+                                        Checkbox(
+                                            checked = newPaymentIsUnknown,
+                                            onCheckedChange = { newPaymentIsUnknown = it }
+                                        )
+                                        Text(
+                                            text = "Unknown Payment (Date & Mode do not matter)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1238,67 +1346,114 @@ fun AddUnassignedBookingDialog(
                                             onValueChange = { newPaymentAmountStr = it },
                                             placeholder = { Text("Amount") },
                                             prefix = { Text("₹ ") },
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier.weight(if (newPaymentIsUnknown) 2.2f else 1.2f),
                                             singleLine = true,
                                             shape = RoundedCornerShape(8.dp),
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                                         )
 
+                                        if (!newPaymentIsUnknown) {
+                                            // Payment Date Selector
+                                            val newDateFormatted = SimpleDateFormat("dd/MM", Locale.US).format(Date(newPaymentDate))
+                                            OutlinedCard(
+                                                modifier = Modifier.weight(0.7f).height(52.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                                                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize().clickable {
+                                                        val cal = Calendar.getInstance().apply { timeInMillis = newPaymentDate }
+                                                        DatePickerDialog(
+                                                            context,
+                                                            { _, y, m, dOfMonth ->
+                                                                val selectedCal = Calendar.getInstance()
+                                                                selectedCal.set(y, m, dOfMonth)
+                                                                newPaymentDate = selectedCal.timeInMillis
+                                                            },
+                                                            cal.get(Calendar.YEAR),
+                                                            cal.get(Calendar.MONTH),
+                                                            cal.get(Calendar.DAY_OF_MONTH)
+                                                        ).show()
+                                                    },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(newDateFormatted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+
                                         Button(
                                             onClick = {
                                                 val amt = newPaymentAmountStr.toDoubleOrNull() ?: 0.0
                                                 if (amt > 0.0) {
-                                                    dialogPayments = dialogPayments + PaymentDetail(amount = amt, method = newPaymentMethod)
+                                                    val newPayment = PaymentDetail(
+                                                        amount = amt,
+                                                        method = if (newPaymentIsUnknown) "Unknown" else newPaymentMethod,
+                                                        timestamp = if (newPaymentIsUnknown) 0L else newPaymentDate
+                                                    )
+                                                    val updatedPayments = dialogPayments + newPayment
+                                                    dialogPayments = updatedPayments
                                                     newPaymentAmountStr = ""
+                                                    newPaymentDate = System.currentTimeMillis() // Reset to current date
+                                                    newPaymentIsUnknown = false // Reset checkbox
+                                                    if (bookingToEdit != null) {
+                                                        val updatedBooking = bookingToEdit.copy(
+                                                            payments = updatedPayments
+                                                        )
+                                                        onConfirm(updatedBooking)
+                                                    }
                                                 }
                                             },
                                             shape = RoundedCornerShape(8.dp),
                                             modifier = Modifier.height(52.dp)
                                         ) {
-                                            Text("Record")
+                                            Text("Record", fontSize = 11.sp)
                                         }
                                     }
 
-                                    val methodList = listOf(
-                                        "UPI (Hotel Acc - GPay)",
-                                        "UPI (Sparsh Acc - GPay)",
-                                        "UPI (Meenu - PhonePe)",
-                                        "UPI (Shop - HDFC)",
-                                        "Cash",
-                                        "Card",
-                                        "Bank Transfer"
-                                    )
-                                    methodList.chunked(3).forEach { rowMethods ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            rowMethods.forEach { method ->
-                                                val isSel = newPaymentMethod == method
-                                                ElevatedCard(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(28.dp)
-                                                        .clickable { newPaymentMethod = method },
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    colors = CardDefaults.cardColors(
-                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                                    )
-                                                ) {
-                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = method,
-                                                            fontSize = 8.sp,
-                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1
+                                    if (!newPaymentIsUnknown) {
+                                        val methodList = listOf(
+                                            "UPI (Hotel Acc - GPay)",
+                                            "UPI (Sparsh Acc - GPay)",
+                                            "UPI (Meenu - PhonePe)",
+                                            "UPI (Shop - HDFC)",
+                                            "Cash",
+                                            "Card",
+                                            "Bank Transfer"
+                                        )
+                                        methodList.chunked(3).forEach { rowMethods ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                rowMethods.forEach { method ->
+                                                    val isSel = newPaymentMethod == method
+                                                    ElevatedCard(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .height(28.dp)
+                                                            .clickable { newPaymentMethod = method },
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                                         )
+                                                    ) {
+                                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                            Text(
+                                                                text = method,
+                                                                fontSize = 8.sp,
+                                                                color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1
+                                                            )
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            if (rowMethods.size < 3) {
-                                                repeat(3 - rowMethods.size) {
-                                                    Spacer(modifier = Modifier.weight(1f))
+                                                if (rowMethods.size < 3) {
+                                                    repeat(3 - rowMethods.size) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
                                                 }
                                             }
                                         }
@@ -1531,7 +1686,8 @@ fun AddUnassignedBookingDialog(
                                     roomNumber = "",
                                     amount = dormShareRatesList.sum(),
                                     nights = allocNights,
-                                    rates = dormShareRatesList
+                                    rates = dormShareRatesList,
+                                    startDate = alloc.startDate.takeIf { !it.isNullOrBlank() } ?: checkInDate
                                 )
                             }
                         } else {
@@ -1549,7 +1705,8 @@ fun AddUnassignedBookingDialog(
                                     roomNumber = "", // Unassigned initially
                                     amount = ratesPerNight.sum(),
                                     nights = allocNights,
-                                    rates = ratesPerNight
+                                    rates = ratesPerNight,
+                                    startDate = alloc.startDate.takeIf { !it.isNullOrBlank() } ?: checkInDate
                                 )
                             )
                         }
@@ -1584,7 +1741,8 @@ fun AddUnassignedBookingDialog(
                             initialPayments.add(
                                 PaymentDetail(
                                     amount = advVal,
-                                    method = advancePaymentMethod
+                                    method = if (advancePaymentIsUnknown) "Unknown" else advancePaymentMethod,
+                                    timestamp = if (advancePaymentIsUnknown) 0L else System.currentTimeMillis()
                                 )
                             )
                         }
@@ -1645,9 +1803,11 @@ fun AssignRoomsDialog(
     var manualBedNoToggle by remember { mutableStateOf(false) }
     var manualBedNoText by remember { mutableStateOf("") }
 
-    val counts = remember(dormRoom, bookings, booking.checkInDate, booking.id) {
-        val maxDormNights = booking.items.filter { isDormCategory(it.category) }.map { it.nights }.maxOrNull() ?: 1
-        getDormBedBookingCounts(booking.checkInDate, maxDormNights, dormRoom, bookings, booking.id)
+    val counts = remember(dormRoom, bookings, booking.checkInDate, booking.id, dormItems) {
+        val dormItem = dormItems.firstOrNull()
+        val dormStartDate = dormItem?.startDate.takeIf { !it.isNullOrBlank() } ?: booking.checkInDate
+        val maxDormNights = dormItems.map { it.nights }.maxOrNull() ?: 1
+        getDormBedBookingCounts(dormStartDate, maxDormNights, dormRoom, bookings, booking.id)
     }
     val freeBeds = remember(counts) {
         (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
@@ -1687,7 +1847,10 @@ fun AssignRoomsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier
+            .fillMaxWidth(0.95f)
+            .navigationBarsPadding()
+            .imePadding(),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Text(
@@ -1752,7 +1915,8 @@ fun AssignRoomsDialog(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 for (nightIndex in 0 until item.nights) {
                                     androidx.compose.runtime.key(item.id, nightIndex) {
-                                        val stayDate = com.sparsh.myapplication.getStayDate(booking.checkInDate, nightIndex)
+                                        val itemStartDate = item.startDate.takeIf { !it.isNullOrBlank() } ?: booking.checkInDate
+                                        val stayDate = com.sparsh.myapplication.getStayDate(itemStartDate, nightIndex)
                                         val assignedRoom = assignments["${item.id}_$nightIndex"] ?: ""
 
                                         val allRoomsForCat = getRoomsForCategory(category)
@@ -1760,8 +1924,9 @@ fun AssignRoomsDialog(
                                             allRoomsForCat.map { room ->
                                                 val isBookedElsewhere = bookings.any { b ->
                                                     b.id != booking.id && b.items.any { bi ->
+                                                        val otherItemStartDate = bi.startDate.takeIf { !it.isNullOrBlank() } ?: b.checkInDate
                                                         (0 until bi.nights).any { j ->
-                                                            com.sparsh.myapplication.getStayDate(b.checkInDate, j) == stayDate &&
+                                                            com.sparsh.myapplication.getStayDate(otherItemStartDate, j) == stayDate &&
                                                             com.sparsh.myapplication.getRoomNumberForNight(bi.roomNumber, j) == room
                                                         }
                                                     }
@@ -1772,7 +1937,9 @@ fun AssignRoomsDialog(
                                                     if (parts.size < 2) return@any false
                                                     val otherItemId = parts[0]
                                                     val otherNightIndex = parts[1].toIntOrNull() ?: 0
-                                                    val otherStayDate = com.sparsh.myapplication.getStayDate(booking.checkInDate, otherNightIndex)
+                                                    val otherItem = booking.items.firstOrNull { it.id == otherItemId }
+                                                    val otherItemStartDate = otherItem?.startDate.takeIf { !it.isNullOrBlank() } ?: booking.checkInDate
+                                                    val otherStayDate = com.sparsh.myapplication.getStayDate(otherItemStartDate, otherNightIndex)
 
                                                     otherStayDate == stayDate && otherItemId != item.id
                                                 }
@@ -2051,6 +2218,7 @@ fun AddPaymentDialog(
     var paymentAmountStr by remember { mutableStateOf("") }
     var paymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
     var paymentAmountError by remember { mutableStateOf<String?>(null) }
+    var paymentIsUnknown by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2087,47 +2255,66 @@ fun AddPaymentDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Text("Payment Method", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val methodList = listOf(
-                    "UPI (Hotel Acc - GPay)",
-                    "UPI (Sparsh Acc - GPay)",
-                    "UPI (Meenu - PhonePe)",
-                    "UPI (Shop - HDFC)",
-                    "Cash",
-                    "Card",
-                    "Bank Transfer"
-                )
-                methodList.chunked(3).forEach { rowMethods ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        rowMethods.forEach { method ->
-                            val isSel = paymentMethod == method
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(28.dp)
-                                    .clickable { paymentMethod = method },
-                                shape = RoundedCornerShape(6.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = method,
-                                        fontSize = 8.sp,
-                                        color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { paymentIsUnknown = !paymentIsUnknown }
+                ) {
+                    Checkbox(
+                        checked = paymentIsUnknown,
+                        onCheckedChange = { paymentIsUnknown = it }
+                    )
+                    Text(
+                        text = "Unknown Payment (Date & Mode do not matter)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (!paymentIsUnknown) {
+                    Text("Payment Method", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val methodList = listOf(
+                        "UPI (Hotel Acc - GPay)",
+                        "UPI (Sparsh Acc - GPay)",
+                        "UPI (Meenu - PhonePe)",
+                        "UPI (Shop - HDFC)",
+                        "Cash",
+                        "Card",
+                        "Bank Transfer"
+                    )
+                    methodList.chunked(3).forEach { rowMethods ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            rowMethods.forEach { method ->
+                                val isSel = paymentMethod == method
+                                ElevatedCard(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(28.dp)
+                                        .clickable { paymentMethod = method },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                     )
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = method,
+                                            fontSize = 8.sp,
+                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        if (rowMethods.size < 3) {
-                            repeat(3 - rowMethods.size) {
-                                Spacer(modifier = Modifier.weight(1f))
+                            if (rowMethods.size < 3) {
+                                repeat(3 - rowMethods.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
                     }
@@ -2150,7 +2337,8 @@ fun AddPaymentDialog(
                     // Create PaymentDetail and append
                     val newPayment = PaymentDetail(
                         amount = amtVal,
-                        method = paymentMethod
+                        method = if (paymentIsUnknown) "Unknown" else paymentMethod,
+                        timestamp = if (paymentIsUnknown) 0L else System.currentTimeMillis()
                     )
                     val updatedPayments = booking.payments + newPayment
                     val updatedBooking = booking.copy(
