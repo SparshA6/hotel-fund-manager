@@ -185,6 +185,10 @@ fun BookingsScreen(
             onConfirm = { updatedBooking ->
                 onSaveBooking(updatedBooking)
                 selectedBookingForEdit = null
+            },
+            onSaveWithoutDismiss = { updatedBooking ->
+                onSaveBooking(updatedBooking)
+                selectedBookingForEdit = updatedBooking
             }
         )
     }
@@ -456,7 +460,8 @@ fun getPlatformColorsForUnassigned(platform: String): Pair<Color, Color> {
 fun AddUnassignedBookingDialog(
     bookingToEdit: Booking? = null,
     onDismiss: () -> Unit,
-    onConfirm: (Booking) -> Unit
+    onConfirm: (Booking) -> Unit,
+    onSaveWithoutDismiss: ((Booking) -> Unit)? = null
 ) {
     var guestName by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.guestName ?: "") }
     val currentDateStr = remember {
@@ -1281,7 +1286,11 @@ fun AddUnassignedBookingDialog(
                                                         val updatedBooking = bookingToEdit.copy(
                                                             payments = updatedPayments
                                                         )
-                                                        onConfirm(updatedBooking)
+                                                        if (onSaveWithoutDismiss != null) {
+                                                            onSaveWithoutDismiss(updatedBooking)
+                                                        } else {
+                                                            onConfirm(updatedBooking)
+                                                        }
                                                     }
                                                 },
                                                 modifier = Modifier.size(24.dp)
@@ -1401,7 +1410,11 @@ fun AddUnassignedBookingDialog(
                                                         val updatedBooking = bookingToEdit.copy(
                                                             payments = updatedPayments
                                                         )
-                                                        onConfirm(updatedBooking)
+                                                        if (onSaveWithoutDismiss != null) {
+                                                            onSaveWithoutDismiss(updatedBooking)
+                                                        } else {
+                                                            onConfirm(updatedBooking)
+                                                        }
                                                     }
                                                 }
                                             },

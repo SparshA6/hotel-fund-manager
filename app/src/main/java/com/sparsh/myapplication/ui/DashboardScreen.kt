@@ -36,6 +36,8 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.window.DialogProperties
 
 enum class ReportPeriod {
     TODAY,
@@ -54,6 +56,7 @@ fun DashboardScreen(
 ) {
     val pullToRefreshState = rememberPullToRefreshState()
     var selectedBookingForAssignment by remember { mutableStateOf<Booking?>(null) }
+    var showPendingPaymentsReport by remember { mutableStateOf(false) }
 
     var selectedPeriod by remember { mutableStateOf(ReportPeriod.TODAY) }
     var calendarOffset by remember(selectedPeriod) { mutableStateOf(0) }
@@ -406,7 +409,13 @@ fun DashboardScreen(
 
                         // Pending Payments Card
                         Card(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    if (pendingPaymentsCount > 0) {
+                                        showPendingPaymentsReport = true
+                                    }
+                                },
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -611,6 +620,198 @@ fun DashboardScreen(
                     }
                 )
             }
+
+            if (showPendingPaymentsReport) {
+                PendingPaymentsReportDialog(
+                    periodLabel = periodLabel,
+                    pendingBookings = activeBookings.filter { it.balance > 0.0 },
+                    currencyFormatter = currencyFormatter,
+                    onDismiss = { showPendingPaymentsReport = false },
+                    onEditBooking = { booking ->
+                        showPendingPaymentsReport = false
+                        onEditBooking(booking)
+                    }
+                )
+            }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PendingPaymentsReportDialog(
+    periodLabel: String,
+    pendingBookings: List<Booking>,
+    currencyFormatter: NumberFormat,
+    onDismiss: () -> Unit,
+    onEditBooking: (Booking) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .fillMaxWidth(0.95f)
+            .navigationBarsPadding()
+            .imePadding(),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Pending Payments",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = "Period: $periodLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "The following bookings active during this period have pending balances. Tap any booking to record payment or edit details.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(pendingBookings, key = { it.id }) { booking ->
+                        val platformColors = when (booking.platform.lowercase()) {
+                            "direct" -> Pair(Color(0xFFE3F2FD), Color(0xFF1565C0))
+                            "mmt" -> Pair(Color(0xFFFFEBEE), Color(0xFFC62828))
+                            "booking.com" -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32))
+                            "agoda" -> Pair(Color(0xFFF3E5F5), Color(0xFF6A1B9A))
+                            "goibibo" -> Pair(Color(0xFFFFF3E0), Color(0xFFEF6C00))
+                            else -> Pair(Color(0xFFECEFF1), Color(0xFF263238))
+                        }
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onEditBooking(booking) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (booking.guestName.isBlank()) "Direct Booking" else booking.guestName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = platformColors.first,
+                                        contentColor = platformColors.second
+                                    ) {
+                                        Text(
+                                            text = booking.platform,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "In: ${booking.checkInDate}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Out: ${getBookingCheckoutDate(booking)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "To Collect",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = currencyFormatter.format(booking.balance),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = "Total: ${currencyFormatter.format(booking.amountCharged)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+
+private fun getBookingCheckoutDate(booking: Booking): String {
+    if (booking.items.isEmpty()) {
+        return getStayDate(booking.checkInDate, 1)
+    }
+    return booking.items.map { item ->
+        val itemStart = item.startDate.takeIf { !it.isNullOrBlank() } ?: booking.checkInDate
+        val nights = if (item.nights > 0) item.nights else 1
+        getStayDate(itemStart, nights)
+    }.maxOrNull() ?: getStayDate(booking.checkInDate, 1)
 }

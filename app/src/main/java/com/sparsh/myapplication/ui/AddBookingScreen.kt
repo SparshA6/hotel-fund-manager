@@ -675,7 +675,11 @@ fun AddBookingGridView(
                 selectedRoomForBooking = null
                 bookingToEditInDialog = null
             },
-            onDelete = onDeleteBooking
+            onDelete = onDeleteBooking,
+            onSaveWithoutDismiss = { updatedBooking ->
+                onAddBooking(updatedBooking)
+                bookingToEditInDialog = updatedBooking
+            }
         )
     }
 }
@@ -690,7 +694,8 @@ fun QuickBookDialog(
     isDormMode: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (Booking) -> Unit,
-    onDelete: ((String) -> Unit)? = null
+    onDelete: ((String) -> Unit)? = null,
+    onSaveWithoutDismiss: ((Booking) -> Unit)? = null
 ) {
     var guestName by remember { mutableStateOf("") }
     var platform by remember { mutableStateOf("Direct") }
@@ -2322,7 +2327,11 @@ fun QuickBookDialog(
                                                             val updatedBooking = bookingToEdit.copy(
                                                                 payments = updatedPayments
                                                             )
-                                                            onConfirm(updatedBooking)
+                                                            if (onSaveWithoutDismiss != null) {
+                                                                onSaveWithoutDismiss(updatedBooking)
+                                                            } else {
+                                                                onConfirm(updatedBooking)
+                                                            }
                                                         }
                                                     },
                                                     modifier = Modifier.size(24.dp)
@@ -2444,7 +2453,11 @@ fun QuickBookDialog(
                                                             val updatedBooking = bookingToEdit.copy(
                                                                 payments = updatedPayments
                                                             )
-                                                            onConfirm(updatedBooking)
+                                                            if (onSaveWithoutDismiss != null) {
+                                                                onSaveWithoutDismiss(updatedBooking)
+                                                            } else {
+                                                                onConfirm(updatedBooking)
+                                                            }
                                                         }
                                                     }
                                                 },

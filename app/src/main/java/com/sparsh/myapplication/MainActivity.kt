@@ -260,6 +260,13 @@ class MainActivity : ComponentActivity() {
                                         }
                                         bookingToEdit = null
                                     },
+                                    onSaveWithoutDismiss = { updatedBooking ->
+                                        coroutineScope.launch {
+                                            bookingRepository.saveBooking(updatedBooking)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                        bookingToEdit = updatedBooking
+                                    },
                                     onDelete = { id ->
                                         coroutineScope.launch {
                                             bookingRepository.deleteBooking(id)
@@ -278,6 +285,13 @@ class MainActivity : ComponentActivity() {
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                         bookingToEdit = null
+                                    },
+                                    onSaveWithoutDismiss = { updatedBooking ->
+                                        coroutineScope.launch {
+                                            bookingRepository.saveBooking(updatedBooking)
+                                            bookings.value = bookingRepository.getBookings()
+                                        }
+                                        bookingToEdit = updatedBooking
                                     }
                                 )
                             }
