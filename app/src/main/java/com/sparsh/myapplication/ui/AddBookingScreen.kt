@@ -748,6 +748,7 @@ fun QuickBookDialog(
     var dormBedsError by remember { mutableStateOf<String?>(null) }
     var customBillError by remember { mutableStateOf<String?>(null) }
     var expensesError by remember { mutableStateOf<String?>(null) }
+    var lastLoadedBookingId by remember { mutableStateOf<String?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
     val dialogLazyListState = rememberLazyListState()
@@ -755,6 +756,8 @@ fun QuickBookDialog(
 
     LaunchedEffect(bookingToEdit, roomNumber) {
         if (bookingToEdit != null) {
+            if (bookingToEdit.id != lastLoadedBookingId) {
+                lastLoadedBookingId = bookingToEdit.id
             guestName = bookingToEdit.guestName
             platform = bookingToEdit.platform
             isBillOn = bookingToEdit.isBillOn
@@ -853,7 +856,14 @@ fun QuickBookDialog(
                 dormSamePrice = true
                 dormRates = listOf("")
             }
+            } else {
+                // Same booking, only update payments
+                dialogPayments = bookingToEdit.payments
+                paymentStatus = bookingToEdit.paymentStatus
+                paymentMethod = bookingToEdit.paymentMethod
+            }
         } else {
+            lastLoadedBookingId = null
             // New booking
             guestName = ""
             platform = "Direct"

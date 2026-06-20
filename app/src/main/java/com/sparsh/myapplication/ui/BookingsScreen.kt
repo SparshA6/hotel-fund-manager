@@ -463,35 +463,35 @@ fun AddUnassignedBookingDialog(
     onConfirm: (Booking) -> Unit,
     onSaveWithoutDismiss: ((Booking) -> Unit)? = null
 ) {
-    var guestName by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.guestName ?: "") }
+    var guestName by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.guestName ?: "") }
     val currentDateStr = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
     }
-    var checkInDate by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.checkInDate ?: currentDateStr) }
-    var platform by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.platform ?: "Direct") }
-    var notes by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.notes ?: "") }
+    var checkInDate by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.checkInDate ?: currentDateStr) }
+    var platform by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.platform ?: "Direct") }
+    var notes by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.notes ?: "") }
 
     var dialogPayments by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.payments ?: emptyList()) }
-    var advancePaymentStr by remember(bookingToEdit) { mutableStateOf("") }
+    var advancePaymentStr by remember(bookingToEdit?.id) { mutableStateOf("") }
     var newPaymentAmountStr by remember { mutableStateOf("") }
     var newPaymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
-    var advancePaymentMethod by remember(bookingToEdit) { mutableStateOf("UPI (Hotel Acc - GPay)") }
+    var advancePaymentMethod by remember(bookingToEdit?.id) { mutableStateOf("UPI (Hotel Acc - GPay)") }
     var newPaymentDate by remember { mutableStateOf(System.currentTimeMillis()) }
-    var advancePaymentIsUnknown by remember(bookingToEdit) { mutableStateOf(false) }
-    var newPaymentIsUnknown by remember(bookingToEdit) { mutableStateOf(false) }
+    var advancePaymentIsUnknown by remember(bookingToEdit?.id) { mutableStateOf(false) }
+    var newPaymentIsUnknown by remember(bookingToEdit?.id) { mutableStateOf(false) }
 
-    var bookingNights by remember(bookingToEdit) {
+    var bookingNights by remember(bookingToEdit?.id) {
         mutableStateOf(bookingToEdit?.items?.map { it.nights }?.maxOrNull() ?: 1)
     }
-    var samePriceForAllNights by remember(bookingToEdit) {
+    var samePriceForAllNights by remember(bookingToEdit?.id) {
         mutableStateOf(bookingToEdit?.items?.all { it.rates.distinct().size <= 1 } ?: true)
     }
-    var isBillOn by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.isBillOn ?: false) }
-    var billAmountStr by remember(bookingToEdit) {
+    var isBillOn by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.isBillOn ?: false) }
+    var billAmountStr by remember(bookingToEdit?.id) {
         mutableStateOf(if (bookingToEdit == null || bookingToEdit.billAmount == 0.0 || !bookingToEdit.isBillOn) "" else formatDouble(bookingToEdit.billAmount))
     }
 
-    val initialAllocations = remember(bookingToEdit) {
+    val initialAllocations = remember(bookingToEdit?.id) {
         if (bookingToEdit != null) {
             val nonDorm = bookingToEdit.items.filter { it.category != "Dorm Bed" }.map { item ->
                 val allRatesEqual = item.rates.distinct().size <= 1
