@@ -1574,21 +1574,28 @@ fun QuickBookDialog(
                                                                     dropdownExpanded = false
                                                                 }
                                                             )
-                                                            if (availableRooms.isEmpty() && assignedRoom.isBlank()) {
+                                                            val distinctRooms = if (assignedRoom.isNotBlank() && !allRoomsForCat.contains(assignedRoom)) {
+                                                                listOf(assignedRoom) + allRoomsForCat
+                                                            } else {
+                                                                allRoomsForCat
+                                                            }
+                                                            if (distinctRooms.isEmpty()) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("No available rooms", fontSize = 12.sp) },
+                                                                    text = { Text("No rooms in category", fontSize = 12.sp) },
                                                                     onClick = {},
                                                                     enabled = false
                                                                 )
                                                             } else {
-                                                                val distinctRooms = if (assignedRoom.isNotBlank() && !availableRooms.contains(assignedRoom)) {
-                                                                    listOf(assignedRoom) + availableRooms
-                                                                } else {
-                                                                    availableRooms
-                                                                }
                                                                 distinctRooms.forEach { room ->
+                                                                    val isAvailable = availableRooms.contains(room) || room == assignedRoom
                                                                     DropdownMenuItem(
-                                                                        text = { Text("Room $room", fontSize = 12.sp) },
+                                                                        text = {
+                                                                            Text(
+                                                                                text = if (isAvailable) "Room $room" else "Room $room (Occupied)",
+                                                                                fontSize = 12.sp,
+                                                                                color = if (isAvailable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                                                                            )
+                                                                        },
                                                                         onClick = {
                                                                             val roomsList = (0 until itemNights).map { getRoomNumberForNight(item.roomNumber, it) }.toMutableList()
                                                                             while (roomsList.size < itemNights) {
