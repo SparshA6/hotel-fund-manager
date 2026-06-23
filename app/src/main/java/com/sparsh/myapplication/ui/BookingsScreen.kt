@@ -1654,22 +1654,24 @@ fun AddUnassignedBookingDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedTextField(
-                            value = discountStr,
-                            onValueChange = { discountStr = it },
-                            label = { Text("Discount (₹)") },
-                            placeholder = { Text("0") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            singleLine = true
-                        )
+                        if (platform == "Direct") {
+                            OutlinedTextField(
+                                value = discountStr,
+                                onValueChange = { discountStr = it },
+                                label = { Text("Discount (₹)") },
+                                placeholder = { Text("0") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(10.dp),
+                                singleLine = true
+                            )
+                        }
                         OutlinedTextField(
                             value = extraPriceStr,
                             onValueChange = { extraPriceStr = it },
                             label = { Text("Extra Charge (₹)") },
                             placeholder = { Text("0") },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(if (platform == "Direct") 1f else 2f),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(10.dp),
                             singleLine = true
@@ -1793,7 +1795,7 @@ fun AddUnassignedBookingDialog(
                         totalAmount
                     }
 
-                    val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                    val discountVal = if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0
                     val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
 
                     // Construct payments
