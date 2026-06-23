@@ -232,6 +232,43 @@ fun UnassignedBookingCard(
         BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     }
 
+    val platformColors = remember(booking.platform) { getPlatformColorsForUnassigned(booking.platform) }
+
+    val allocationTexts = remember(booking) {
+        val list = mutableListOf<String>()
+        val roomsGrouped = booking.items.filter { it.category != "Dorm Bed" }.groupBy { Pair(it.category, it.amount) }
+        roomsGrouped.forEach { (pair, items) ->
+            val (category, amount) = pair
+            val firstItem = items.firstOrNull()
+            val nights = firstItem?.nights ?: 1
+            val rateText = if (nights > 1) {
+                val avgRate = amount / nights
+                "₹${avgRate.toInt()}/night ($nights nights)"
+            } else {
+                "₹${amount.toInt()}"
+            }
+            list.add("• ${items.size}x $category Rooms @ $rateText each")
+        }
+
+        val dormItems = booking.items.filter { it.category == "Dorm Bed" }
+        if (dormItems.isNotEmpty()) {
+            val firstDorm = dormItems.first()
+            val nights = firstDorm.nights
+            val rateText = if (nights > 1) {
+                val avgRate = firstDorm.amount / nights
+                "₹${avgRate.toInt()}/night ($nights nights)"
+            } else {
+                "₹${firstDorm.amount.toInt()}"
+            }
+            list.add("• ${dormItems.size}x Dorm Beds @ $rateText each")
+        } else if (booking.dormBedsSelected > 0) {
+            val rate = if (booking.dormBedsSelected > 0) booking.dormTotalAmount / booking.dormBedsSelected else 0.0
+            list.add("• ${booking.dormBedsSelected}x Dorm Beds @ ₹${rate.toInt()} each")
+        }
+        list
+    }
+
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -269,7 +306,7 @@ fun UnassignedBookingCard(
                 }
 
                 // Platform Chip
-                val platformColors = getPlatformColorsForUnassigned(booking.platform)
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -297,49 +334,15 @@ fun UnassignedBookingCard(
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Group room allocations by category and price
-                val roomsGrouped = booking.items.filter { it.category != "Dorm Bed" }.groupBy { Pair(it.category, it.amount) }
-                roomsGrouped.forEach { (pair, items) ->
-                    val (category, amount) = pair
-                    val firstItem = items.firstOrNull()
-                    val nights = firstItem?.nights ?: 1
-                    val rateText = if (nights > 1) {
-                        val avgRate = amount / nights
-                        "₹${avgRate.toInt()}/night ($nights nights)"
-                    } else {
-                        "₹${amount.toInt()}"
-                    }
+                allocationTexts.forEach { text ->
                     Text(
-                        text = "• ${items.size}x $category Rooms @ $rateText each",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                val dormItems = booking.items.filter { it.category == "Dorm Bed" }
-                if (dormItems.isNotEmpty()) {
-                    val firstDorm = dormItems.first()
-                    val nights = firstDorm.nights
-                    val rateText = if (nights > 1) {
-                        val avgRate = firstDorm.amount / nights
-                        "₹${avgRate.toInt()}/night ($nights nights)"
-                    } else {
-                        "₹${firstDorm.amount.toInt()}"
-                    }
-                    Text(
-                        text = "• ${dormItems.size}x Dorm Beds @ $rateText each",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                } else if (booking.dormBedsSelected > 0) {
-                    val rate = if (booking.dormBedsSelected > 0) booking.dormTotalAmount / booking.dormBedsSelected else 0.0
-                    Text(
-                        text = "• ${booking.dormBedsSelected}x Dorm Beds @ ₹${rate.toInt()} each",
+                        text = text,
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
+
 
             if (booking.notes.isNotBlank()) {
                 Text(
@@ -442,7 +445,6 @@ fun UnassignedBookingCard(
     }
 }
 
-@Composable
 fun getPlatformColorsForUnassigned(platform: String): Pair<Color, Color> {
     return when (platform) {
         "Direct" -> Pair(Color(0xFFE8EAF6), Color(0xFF1A237E))
@@ -618,38 +620,39 @@ fun AddUnassignedBookingDialog(
                     )
                 }
 
-                // Check-in Date
-                item {
-                    val displayCheckInDate = if (checkInDate.isNotBlank()) {
-                        try {
-                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            val formatter = SimpleDateFormat("dd/MM", Locale.US)
-                            val d = parser.parse(checkInDate)
-                            if (d != null) formatter.format(d) else checkInDate
-                        } catch (e: Exception) {
-                            checkInDate
-                        }
-                    } else ""
+                if (platform != "Direct") {
+                    item {
+                        val displayCheckInDate = if (checkInDate.isNotBlank()) {
+                            try {
+                                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                                val formatter = SimpleDateFormat("dd/MM", Locale.US)
+                                val d = parser.parse(checkInDate)
+                                if (d != null) formatter.format(d) else checkInDate
+                            } catch (e: Exception) {
+                                checkInDate
+                            }
+                        } else ""
 
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = displayCheckInDate,
-                            onValueChange = {},
-                            label = { Text("Check-in Date (Required)") },
-                            isError = dateError != null,
-                            supportingText = dateError?.let { { Text(it) } },
-                            readOnly = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = {
-                                Icon(Icons.Default.DateRange, contentDescription = "Select Date")
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { datePickerDialog.show() }
-                        )
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = displayCheckInDate,
+                                onValueChange = {},
+                                label = { Text("Check-in Date (Required)") },
+                                isError = dateError != null,
+                                supportingText = dateError?.let { { Text(it) } },
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { datePickerDialog.show() }
+                            )
+                        }
                     }
                 }
 
@@ -706,42 +709,72 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Global Nights & Same Price Toggle
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                if (platform != "Direct") {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Nights",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (platform == "Direct") {
-                                    Text(
-                                        text = "Default for new allocations",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
-                                }
-                            }
-                            
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        if (bookingNights > 1) {
-                                            bookingNights--
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Nights",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (platform == "Direct") {
+                                        Text(
+                                            text = "Default for new allocations",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            if (bookingNights > 1) {
+                                                bookingNights--
+                                                if (platform != "Direct") {
+                                                    selectedAllocations = selectedAllocations.map { alloc ->
+                                                        val targetSize = if (samePriceForAllNights) 1 else bookingNights
+                                                        alloc.copy(
+                                                            nights = bookingNights,
+                                                            samePrice = samePriceForAllNights,
+                                                            rates = adjustRatesList(alloc.rates, targetSize),
+                                                            rate = if (samePriceForAllNights) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        enabled = bookingNights > 1,
+                                        modifier = Modifier.size(36.dp),
+                                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Decrease nights")
+                                    }
+                                    
+                                    Text(
+                                        text = bookingNights.toString(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = {
+                                            bookingNights++
                                             if (platform != "Direct") {
                                                 selectedAllocations = selectedAllocations.map { alloc ->
                                                     val targetSize = if (samePriceForAllNights) 1 else bookingNights
@@ -753,83 +786,56 @@ fun AddUnassignedBookingDialog(
                                                     )
                                                 }
                                             }
-                                        }
-                                    },
-                                    enabled = bookingNights > 1,
-                                    modifier = Modifier.size(36.dp),
-                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Decrease nights")
+                                        },
+                                        modifier = Modifier.size(36.dp),
+                                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.KeyboardArrowUp, contentDescription = "Increase nights")
+                                    }
                                 }
-                                
-                                Text(
-                                    text = bookingNights.toString(),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                                
-                                IconButton(
-                                    onClick = {
-                                        bookingNights++
+                            }
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Same price for all nights",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (platform == "Direct") {
+                                        Text(
+                                            text = "Default for new allocations",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                Switch(
+                                    checked = samePriceForAllNights,
+                                    onCheckedChange = { checked ->
+                                        samePriceForAllNights = checked
                                         if (platform != "Direct") {
                                             selectedAllocations = selectedAllocations.map { alloc ->
-                                                val targetSize = if (samePriceForAllNights) 1 else bookingNights
+                                                val targetSize = if (checked) 1 else bookingNights
                                                 alloc.copy(
-                                                    nights = bookingNights,
-                                                    samePrice = samePriceForAllNights,
+                                                    samePrice = checked,
                                                     rates = adjustRatesList(alloc.rates, targetSize),
-                                                    rate = if (samePriceForAllNights) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
+                                                    rate = if (checked) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
                                                 )
                                             }
                                         }
-                                    },
-                                    modifier = Modifier.size(36.dp),
-                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Icon(imageVector = Icons.Default.KeyboardArrowUp, contentDescription = "Increase nights")
-                                }
-                            }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Same price for all nights",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (platform == "Direct") {
-                                    Text(
-                                        text = "Default for new allocations",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = samePriceForAllNights,
-                                onCheckedChange = { checked ->
-                                    samePriceForAllNights = checked
-                                    if (platform != "Direct") {
-                                        selectedAllocations = selectedAllocations.map { alloc ->
-                                            val targetSize = if (checked) 1 else bookingNights
-                                            alloc.copy(
-                                                samePrice = checked,
-                                                rates = adjustRatesList(alloc.rates, targetSize),
-                                                rate = if (checked) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
-                                            )
-                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
+
 
                 // Room allocations list
                 item {
@@ -1762,9 +1768,14 @@ fun AddUnassignedBookingDialog(
                         initialPayments
                     }
 
+                    val finalCheckInDate = if (platform == "Direct") {
+                        selectedAllocations.map { it.startDate.takeIf { !it.isNullOrBlank() } ?: checkInDate }.minOrNull() ?: checkInDate
+                    } else {
+                        checkInDate
+                    }
                     val newBooking = Booking(
                         id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
-                        checkInDate = checkInDate,
+                        checkInDate = finalCheckInDate,
                         platform = platform,
                         guestName = guestName.trim(),
                         items = itemsList,

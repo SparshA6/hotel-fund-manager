@@ -58,10 +58,12 @@ fun BookingItem(
         )
     }
 
-    val statusColor = if (booking.paymentStatus.equals("Paid", ignoreCase = true)) {
-        Color(0xFFE8F5E9) to Color(0xFF2E7D32)
-    } else {
-        Color(0xFFFFF8E1) to Color(0xFFF57F17)
+    val statusColor = remember(booking.paymentStatus) {
+        if (booking.paymentStatus.equals("Paid", ignoreCase = true)) {
+            Color(0xFFE8F5E9) to Color(0xFF2E7D32)
+        } else {
+            Color(0xFFFFF8E1) to Color(0xFFF57F17)
+        }
     }
 
     Card(
@@ -178,15 +180,18 @@ fun BookingItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        val roomDesc = booking.items.filter { it.category != "Dorm" && it.category != "Dorm Bed" }.joinToString(", ") { it.roomNumber }
-                        val dormList = mutableListOf<String>()
-                        if (booking.dormBedsSelected > 0) {
-                            if (booking.dormRoomABeds.isNotBlank()) dormList.add("Dorm A: (${booking.dormRoomABeds})")
-                            if (booking.dormRoomBBeds.isNotBlank()) dormList.add("Dorm B: (${booking.dormRoomBBeds})")
-                            if (dormList.isEmpty()) dormList.add("Dorm (${booking.dormBedsSelected} beds)")
+                        val combinedDesc = remember(booking) {
+                            val roomDesc = booking.items.filter { it.category != "Dorm" && it.category != "Dorm Bed" }.joinToString(", ") { it.roomNumber }
+                            val dormList = mutableListOf<String>()
+                            if (booking.dormBedsSelected > 0) {
+                                if (booking.dormRoomABeds.isNotBlank()) dormList.add("Dorm A: (${booking.dormRoomABeds})")
+                                if (booking.dormRoomBBeds.isNotBlank()) dormList.add("Dorm B: (${booking.dormRoomBBeds})")
+                                if (dormList.isEmpty()) dormList.add("Dorm (${booking.dormBedsSelected} beds)")
+                            }
+                            val dormDesc = dormList.joinToString(", ")
+                            listOf(roomDesc, dormDesc).filter { it.isNotBlank() }.joinToString(" | ")
                         }
-                        val dormDesc = dormList.joinToString(", ")
-                        val combinedDesc = listOf(roomDesc, dormDesc).filter { it.isNotBlank() }.joinToString(" | ")
+
 
                         Text(
                             text = if (combinedDesc.isEmpty()) "No allocations" else combinedDesc,

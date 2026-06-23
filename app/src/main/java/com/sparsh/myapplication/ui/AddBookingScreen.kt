@@ -1080,116 +1080,98 @@ fun QuickBookDialog(
                 }
 
                 // Global Nights & Same Price Toggle
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                if (platform != "Direct") {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Nights",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (platform == "Direct") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Default for new allocations",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        text = "Nights",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            }
-                            
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        if (bookingNights > 1) {
-                                            bookingNights--
-                                            if (platform != "Direct") {
+                                
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            if (bookingNights > 1) {
+                                                bookingNights--
                                                 dialogRoomItems.forEach { item ->
                                                     val curR = itemRatesMap[item.id] ?: listOf("")
                                                     itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (samePriceForAllNights) 1 else bookingNights))
                                                 }
                                                 dormRates = adjustRatesList(dormRates, if (samePriceForAllNights) 1 else bookingNights)
                                             }
-                                        }
-                                    },
-                                    enabled = bookingNights > 1,
-                                    modifier = Modifier.size(36.dp),
-                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Decrease nights")
-                                }
-                                
-                                Text(
-                                    text = bookingNights.toString(),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                                
-                                IconButton(
-                                    onClick = {
-                                        bookingNights++
-                                        if (platform != "Direct") {
+                                        },
+                                        enabled = bookingNights > 1,
+                                        modifier = Modifier.size(36.dp),
+                                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Decrease nights")
+                                    }
+                                    
+                                    Text(
+                                        text = bookingNights.toString(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = {
+                                            bookingNights++
                                             dialogRoomItems.forEach { item ->
                                                 val curR = itemRatesMap[item.id] ?: listOf("")
                                                 itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (samePriceForAllNights) 1 else bookingNights))
                                             }
                                             dormRates = adjustRatesList(dormRates, if (samePriceForAllNights) 1 else bookingNights)
-                                        }
-                                    },
-                                    modifier = Modifier.size(36.dp),
-                                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Icon(imageVector = Icons.Default.KeyboardArrowUp, contentDescription = "Increase nights")
+                                        },
+                                        modifier = Modifier.size(36.dp),
+                                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(imageVector = Icons.Default.KeyboardArrowUp, contentDescription = "Increase nights")
+                                    }
                                 }
                             }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Same price for all nights",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (platform == "Direct") {
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Default for new allocations",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        text = "Same price for all nights",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            }
-                            Switch(
-                                checked = samePriceForAllNights,
-                                onCheckedChange = { checked ->
-                                    samePriceForAllNights = checked
-                                    if (platform != "Direct") {
+                                Switch(
+                                    checked = samePriceForAllNights,
+                                    onCheckedChange = { checked ->
+                                        samePriceForAllNights = checked
                                         dialogRoomItems.forEach { item ->
                                             val curR = itemRatesMap[item.id] ?: listOf("")
                                             itemRatesMap = itemRatesMap + (item.id to adjustRatesList(curR, if (checked) 1 else bookingNights))
                                         }
                                         dormRates = adjustRatesList(dormRates, if (checked) 1 else bookingNights)
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -1261,7 +1243,7 @@ fun QuickBookDialog(
                             val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
                             val ratesList = itemRatesMap[item.id] ?: listOf("")
                             val itemCategory = if (item.roomNumber.isNotBlank()) {
-                                val firstRoom = item.roomNumber.split(",").firstOrNull() ?: ""
+                                val firstRoom = item.roomNumber.split(",").firstOrNull { it.isNotBlank() } ?: ""
                                 if (firstRoom.isNotBlank()) getRoomCategory(firstRoom) else (if (item.category.isNotBlank()) item.category else "Room")
                             } else {
                                 if (item.category.isNotBlank()) item.category else "Room"
@@ -1443,25 +1425,26 @@ fun QuickBookDialog(
                                                 val stayDate = getStayDate(itemStartDate, nightIndex)
                                                 val assignedRoom = getRoomNumberForNight(item.roomNumber, nightIndex)
                                                 val displayRate = ratesList.getOrNull(if (itemSamePrice) 0 else nightIndex) ?: ""
-
-                                                // Available rooms of that category for this specific night
                                                 val allRoomsForCat = getRoomsForCategory(itemCategory)
-                                                val availableRooms = allRoomsForCat.filter { room ->
-                                                    val isBookedElsewhere = bookings.any { b ->
-                                                        b.id != (bookingToEdit?.id ?: "") && 
-                                                        b.items.any { bi -> 
-                                                            val biStartDate = bi.startDate.takeIf { !it.isNullOrBlank() } ?: b.checkInDate
-                                                            (0 until bi.nights).any { biNightIdx ->
-                                                                getStayDate(biStartDate, biNightIdx) == stayDate &&
-                                                                getRoomNumberForNight(bi.roomNumber, biNightIdx) == room
+                                                val otherItemsRoomSelection = remember(dialogRoomItems, item.id, nightIndex) {
+                                                    dialogRoomItems.filter { it.id != item.id }
+                                                        .map { getRoomNumberForNight(it.roomNumber, nightIndex) }
+                                                }
+                                                val availableRooms = remember(allRoomsForCat, bookings, stayDate, otherItemsRoomSelection, bookingToEdit?.id) {
+                                                    allRoomsForCat.filter { room ->
+                                                        val isBookedElsewhere = bookings.any { b ->
+                                                            b.id != (bookingToEdit?.id ?: "") && 
+                                                            b.items.any { bi -> 
+                                                                val biStartDate = bi.startDate.takeIf { !it.isNullOrBlank() } ?: b.checkInDate
+                                                                (0 until bi.nights).any { biNightIdx ->
+                                                                    getStayDate(biStartDate, biNightIdx) == stayDate &&
+                                                                    getRoomNumberForNight(bi.roomNumber, biNightIdx) == room
+                                                                }
                                                             }
                                                         }
+                                                        val isSelectedByOtherItemThisNight = otherItemsRoomSelection.contains(room)
+                                                        !isBookedElsewhere && !isSelectedByOtherItemThisNight
                                                     }
-                                                    val isSelectedByOtherItemThisNight = dialogRoomItems.any { other ->
-                                                        if (other.id == item.id) return@any false
-                                                        getRoomNumberForNight(other.roomNumber, nightIndex) == room
-                                                    }
-                                                    !isBookedElsewhere && !isSelectedByOtherItemThisNight
                                                 }
 
                                                 var dropdownExpanded by remember { mutableStateOf(false) }
@@ -2573,325 +2556,10 @@ fun QuickBookDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-            Button(
-                onClick = {
-                    // Clear previous errors
-                    guestNameError = null
-                    val newRoomNoErrors = mutableMapOf<String, String>()
-                    val newRoomRateErrors = mutableMapOf<String, String>()
-                    roomNoErrors = emptyMap()
-                    roomRateErrors = emptyMap()
-                    dormBedCountError = null
-                    dormBedsError = null
-                    dormTotalAmountError = null
-                    customBillError = null
-                    expensesError = null
-                    showError = false
-                    errorMessage = ""
-
-                    val scrollToField = { field: String ->
-                        var idx = 0
-                        if (showError) idx++ // Error Card (index 0)
-                        
-                        val targetIdx = when (field) {
-                            "platform" -> idx
-                            "guestName" -> idx + 1
-                            "roomsList" -> idx + 2
-                            "dormBeds" -> idx + 3
-                            "dormTotalAmount" -> idx + 4
-                            "customBill" -> {
-                                var currentIdx = idx + 3
-                                if (hasDormBooking) currentIdx += 2
-                                currentIdx
-                            }
-                            else -> 0
-                        }
-                        coroutineScope.launch {
-                            dialogLazyListState.animateScrollToItem(targetIdx)
-                        }
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
                     }
-
-                    // 1. Validate name if required
-                    val nameRequired = (platform != "Direct") || (platform == "Direct" && isBillOn)
-                    if (nameRequired && guestName.trim().isEmpty()) {
-                        guestNameError = "Guest Name is required for this booking type."
-                        errorMessage = "Guest Name is required for this booking type."
-                        showError = true
-                        scrollToField("guestName")
-                        return@Button
-                    }
-
-                    // 2. Validate allocations (at least one room/bed)
-                    if (dialogRoomItems.isEmpty() && !hasDormBooking) {
-                        errorMessage = "Please allocate at least one room or bed."
-                        showError = true
-                        scrollToField("roomsList")
-                        return@Button
-                    }
-
-                    // 3. Validate Room items details
-                    dialogRoomItems.forEach { item ->
-                        val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
-                        val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
-                        
-                        // Check if at least one room is assigned across the stay
-                        val assignedRooms = (0 until itemNights).map { getRoomNumberForNight(item.roomNumber, it) }
-                        if (assignedRooms.all { it.isBlank() }) {
-                            newRoomNoErrors[item.id] = "At least one room assignment is required."
-                        }
-
-                        val ratesList = itemRatesMap[item.id] ?: listOf("")
-                        if (itemSamePrice) {
-                            val rateVal = ratesList.firstOrNull()?.toDoubleOrNull() ?: 0.0
-                            if (rateVal <= 0.0) {
-                                newRoomRateErrors[item.id] = "Rate must be greater than 0."
-                            }
-                        } else {
-                            val hasInvalidRate = ratesList.take(itemNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
-                            if (hasInvalidRate || ratesList.size < itemNights) {
-                                newRoomRateErrors[item.id] = "All night rates must be greater than 0."
-                            }
-                        }
-                    }
-                    if (newRoomNoErrors.isNotEmpty() || newRoomRateErrors.isNotEmpty()) {
-                        roomNoErrors = newRoomNoErrors
-                        roomRateErrors = newRoomRateErrors
-                        errorMessage = "Please enter valid room numbers and rates (> 0)."
-                        showError = true
-                        scrollToField("roomsList")
-                        return@Button
-                    }
-
-                    // Validate Dorm items details
-                    var parsedDormBeds = emptyList<String>()
-                    if (hasDormBooking) {
-                        val bedCountVal = dormBedCountStr.toIntOrNull()
-                        if (bedCountVal == null || bedCountVal !in 1..8) {
-                            dormBedCountError = "Please enter a valid number of beds (between 1 and 8)."
-                            errorMessage = "Please enter a valid number of beds (between 1 and 8)."
-                            showError = true
-                            scrollToField("dormBeds")
-                            return@Button
-                        }
-                        dormBedCount = bedCountVal
-
-                        val actualDormNights = if (platform == "Direct") dormNights else bookingNights
-                        val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
-                        val dormRatesList = dormRates
-                        
-                        if (actualDormSamePrice) {
-                            val totalDormVal = dormRatesList.firstOrNull()?.toDoubleOrNull()
-                            if (totalDormVal == null || totalDormVal <= 0.0) {
-                                dormTotalAmountError = "Please enter a valid total dorm price."
-                                errorMessage = "Please enter a valid total dorm price."
-                                showError = true
-                                scrollToField("dormTotalAmount")
-                                return@Button
-                            }
-                        } else {
-                            val hasInvalidRate = dormRatesList.take(actualDormNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
-                            if (hasInvalidRate || dormRatesList.size < actualDormNights) {
-                                dormTotalAmountError = "All night rates must be greater than 0."
-                                errorMessage = "All night rates must be greater than 0."
-                                showError = true
-                                scrollToField("dormTotalAmount")
-                                return@Button
-                            }
-                        }
-
-                        if (manualBedNoToggle) {
-                            if (manualBedNoText.trim().isEmpty()) {
-                                dormBedsError = "Please enter bed numbers."
-                                errorMessage = "Please enter bed numbers."
-                                showError = true
-                                scrollToField("dormBeds")
-                                return@Button
-                            }
-                            parsedDormBeds = parseBedNumbers(manualBedNoText, dormRoom)
-                            if (parsedDormBeds.isEmpty()) {
-                                dormBedsError = "Please enter valid bed numbers (e.g. 1-4, 6)."
-                                errorMessage = "Please enter valid bed numbers (e.g. 1-4, 6)."
-                                showError = true
-                                scrollToField("dormBeds")
-                                return@Button
-                            }
-                            
-                            // Validate indices are between 1 and 8
-                            val invalidBed = parsedDormBeds.any { bed ->
-                                val num = bed.substring(dormRoom.length).toIntOrNull()
-                                num == null || num !in 1..8
-                            }
-                            if (invalidBed) {
-                                dormBedsError = "Bed numbers must be between 1 and 8."
-                                errorMessage = "Bed numbers must be between 1 and 8."
-                                showError = true
-                                scrollToField("dormBeds")
-                                return@Button
-                            }
-
-                            if (parsedDormBeds.size != dormBedCount) {
-                                dormBedsError = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
-                                errorMessage = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
-                                showError = true
-                                scrollToField("dormBeds")
-                                return@Button
-                            }
-                        } else {
-                            // Automatic allocation
-                            val counts = getDormBedBookingCounts(date, actualDormNights, dormRoom, bookings, bookingToEdit?.id)
-                            val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
-                            val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
-                                compareBy( { counts[it] ?: 0 }, { it } )
-                            )
-
-                            val assignedBeds = mutableListOf<Int>()
-                            if (freeBeds.size >= dormBedCount) {
-                                assignedBeds.addAll(freeBeds.take(dormBedCount))
-                            } else {
-                                assignedBeds.addAll(freeBeds)
-                                val remainingNeeded = dormBedCount - freeBeds.size
-                                assignedBeds.addAll(bookedBeds.take(remainingNeeded))
-                            }
-                            parsedDormBeds = assignedBeds.sorted().map { "$dormRoom$it" }
-                        }
-                    }
-
-                    // 4. Calculate final items allocation values
-                    val actualDormNights = if (platform == "Direct") dormNights else bookingNights
-                    val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
-                    val dormRatesList = dormRates.take(actualDormNights).map { it.toDoubleOrNull() ?: 0.0 }
-                    
-                    val dormShareRatesList = if (actualDormSamePrice) {
-                        val totalEntered = dormRatesList.firstOrNull() ?: 0.0
-                        val ratePerBedPerNight = totalEntered / (actualDormNights.coerceAtLeast(1) * dormBedCount.coerceAtLeast(1))
-                        List(actualDormNights) { ratePerBedPerNight }
-                    } else {
-                        dormRatesList.map { it / dormBedCount.coerceAtLeast(1) }
-                    }
-                    
-                    val totalDormVal = dormShareRatesList.sum() * dormBedCount
-
-                    // Build Dorm booking items list
-                    val dormBookingItems = if (hasDormBooking) {
-                        parsedDormBeds.map { bedNo ->
-                            BookingItem(
-                                id = UUID.randomUUID().toString(),
-                                category = getRoomCategory(bedNo),
-                                roomNumber = bedNo,
-                                amount = dormShareRatesList.sum(),
-                                nights = actualDormNights,
-                                rates = dormShareRatesList,
-                                startDate = dormStartDate
-                            )
-                        }
-                    } else {
-                        emptyList()
-                    }
-
-                    val roomBookingItems = dialogRoomItems.map { item ->
-                        val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
-                        val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
-                        val ratesList = (itemRatesMap[item.id] ?: listOf("")).take(itemNights).map { it.toDoubleOrNull() ?: 0.0 }
-                        
-                        val ratesPerNight = if (itemSamePrice) {
-                            val ratePerNight = ratesList.firstOrNull() ?: 0.0
-                            List(itemNights) { ratePerNight }
-                        } else {
-                            ratesList
-                        }
-                        
-                        item.copy(
-                            category = if (item.roomNumber.isNotBlank()) {
-                                val firstRoom = item.roomNumber.split(",").firstOrNull() ?: ""
-                                if (firstRoom.isNotBlank()) getRoomCategory(firstRoom) else item.category
-                            } else item.category,
-                            amount = ratesPerNight.sum(),
-                            nights = itemNights,
-                            rates = ratesPerNight
-                        )
-                    }
-
-                    val updatedItems = roomBookingItems + dormBookingItems
-                    val calculatedSum = updatedItems.sumOf { it.amount }
-
-                    val finalBillAmount = if (platform == "Direct" && isBillOn) {
-                        val customBill = billAmountStr.toDoubleOrNull()
-                        if (customBill == null || customBill <= 0.0) {
-                            customBillError = "Please enter a valid custom bill amount."
-                            errorMessage = "Please enter a valid custom bill amount."
-                            showError = true
-                            scrollToField("customBill")
-                            return@Button
-                        }
-                        customBill
-                    } else {
-                        calculatedSum
-                    }
-
-                    val commissionVal = if (platform != "Direct") {
-                        com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, finalBillAmount).totalDeductions
-                    } else {
-                        0.0
-                    }
-
-                    // Create/Update Booking
-                    val finalGuestName = if (platform == "Direct" && !isBillOn && guestName.trim().isEmpty()) "Direct Guest" else guestName.trim()
-
-                    val dormRoomABedsStr = if (hasDormBooking && dormRoom == "A") {
-                        if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
-                    } else ""
-
-                    val dormRoomBBedsStr = if (hasDormBooking && dormRoom == "B") {
-                        if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
-                    } else ""
-
-                    val finalPayments = if (platform != "Direct") {
-                        listOf(
-                            PaymentDetail(
-                                amount = finalBillAmount,
-                                method = "UPI (Hotel Acc - GPay)"
-                            )
-                        )
-                    } else if (bookingToEdit == null) {
-                        val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
-                        if (advVal > 0.0) {
-                            listOf(
-                                PaymentDetail(
-                                    amount = advVal,
-                                    method = if (advancePaymentIsUnknown) "Unknown" else advancePaymentMethod,
-                                    timestamp = if (advancePaymentIsUnknown) 0L else advancePaymentDate
-                                )
-                            )
-                        } else {
-                            emptyList()
-                        }
-                    } else {
-                        dialogPayments
-                    }
-
-                    val newBooking = Booking(
-                        id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
-                        checkInDate = date,
-                        platform = platform,
-                        guestName = finalGuestName,
-                        items = updatedItems,
-                        dormBedsSelected = if (hasDormBooking) dormBedCount else 0,
-                        dormRoomABeds = dormRoomABedsStr,
-                        dormRoomBBeds = dormRoomBBedsStr,
-                        dormTotalAmount = totalDormVal,
-                        isBillOn = if (platform == "Direct") isBillOn else true,
-                        billAmount = finalBillAmount,
-                        expenses = commissionVal,
-                        payments = finalPayments,
-                        notes = notes.trim(),
-                        timestamp = bookingToEdit?.timestamp ?: System.currentTimeMillis()
-                    )
-                    onConfirm(newBooking)
-                }
-            ) {
-                Text("Confirm")
-            }
-                    // Dismiss side: Delete + Cancel
+                    Spacer(modifier = Modifier.weight(1f))
                     if (bookingToEdit != null && onDelete != null) {
                         var showDeleteConfirm by remember { mutableStateOf(false) }
                         if (showDeleteConfirm) {
@@ -2933,10 +2601,342 @@ fun QuickBookDialog(
                         ) {
                             Text("Delete", fontWeight = FontWeight.Bold)
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                    Button(
+                        onClick = {
+                            // Clear previous errors
+                            guestNameError = null
+                            val newRoomNoErrors = mutableMapOf<String, String>()
+                            val newRoomRateErrors = mutableMapOf<String, String>()
+                            roomNoErrors = emptyMap()
+                            roomRateErrors = emptyMap()
+                            dormBedCountError = null
+                            dormBedsError = null
+                            dormTotalAmountError = null
+                            customBillError = null
+                            expensesError = null
+                            showError = false
+                            errorMessage = ""
+
+                            val scrollToField = { field: String ->
+                                var idx = 0
+                                if (showError) idx++ // Error Card (index 0)
+                                
+                                val targetIdx = when (field) {
+                                    "platform" -> idx
+                                    "guestName" -> idx + 1
+                                    "roomsList" -> idx + 2
+                                    "dormBeds" -> idx + 3
+                                    "dormTotalAmount" -> idx + 4
+                                    "customBill" -> {
+                                        var currentIdx = idx + 3
+                                        if (hasDormBooking) currentIdx += 2
+                                        currentIdx
+                                    }
+                                    else -> 0
+                                }
+                                coroutineScope.launch {
+                                    dialogLazyListState.animateScrollToItem(targetIdx)
+                                }
+                            }
+
+                            // 1. Validate name if required
+                            val nameRequired = (platform != "Direct") || (platform == "Direct" && isBillOn)
+                            if (nameRequired && guestName.trim().isEmpty()) {
+                                guestNameError = "Guest Name is required for this booking type."
+                                errorMessage = "Guest Name is required for this booking type."
+                                showError = true
+                                scrollToField("guestName")
+                                return@Button
+                            }
+
+                            // 2. Validate allocations (at least one room/bed)
+                            if (dialogRoomItems.isEmpty() && !hasDormBooking) {
+                                errorMessage = "Please allocate at least one room or bed."
+                                showError = true
+                                scrollToField("roomsList")
+                                return@Button
+                            }
+
+                            // 3. Validate Room items details
+                            dialogRoomItems.forEach { item ->
+                                val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                                val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
+                                
+                                // Check if at least one room is assigned across the stay
+                                val assignedRooms = (0 until itemNights).map { getRoomNumberForNight(item.roomNumber, it) }
+                                if (assignedRooms.all { it.isBlank() }) {
+                                    newRoomNoErrors[item.id] = "At least one room assignment is required."
+                                }
+
+                                val ratesList = itemRatesMap[item.id] ?: listOf("")
+                                if (itemSamePrice) {
+                                    val rateVal = ratesList.firstOrNull()?.toDoubleOrNull() ?: 0.0
+                                    if (rateVal <= 0.0) {
+                                        newRoomRateErrors[item.id] = "Rate must be greater than 0."
+                                    }
+                                } else {
+                                    val hasInvalidRate = ratesList.take(itemNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
+                                    if (hasInvalidRate || ratesList.size < itemNights) {
+                                        newRoomRateErrors[item.id] = "All night rates must be greater than 0."
+                                    }
+                                }
+                            }
+                            if (newRoomNoErrors.isNotEmpty() || newRoomRateErrors.isNotEmpty()) {
+                                roomNoErrors = newRoomNoErrors
+                                roomRateErrors = newRoomRateErrors
+                                errorMessage = "Please enter valid room numbers and rates (> 0)."
+                                showError = true
+                                scrollToField("roomsList")
+                                return@Button
+                            }
+
+                            // Validate Dorm items details
+                            var parsedDormBeds = emptyList<String>()
+                            if (hasDormBooking) {
+                                val bedCountVal = dormBedCountStr.toIntOrNull()
+                                if (bedCountVal == null || bedCountVal !in 1..8) {
+                                    dormBedCountError = "Please enter a valid number of beds (between 1 and 8)."
+                                    errorMessage = "Please enter a valid number of beds (between 1 and 8)."
+                                    showError = true
+                                    scrollToField("dormBeds")
+                                    return@Button
+                                }
+                                dormBedCount = bedCountVal
+
+                                val actualDormNights = if (platform == "Direct") dormNights else bookingNights
+                                val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                                val dormRatesList = dormRates
+                                
+                                if (actualDormSamePrice) {
+                                    val totalDormVal = dormRatesList.firstOrNull()?.toDoubleOrNull()
+                                    if (totalDormVal == null || totalDormVal <= 0.0) {
+                                        dormTotalAmountError = "Please enter a valid total dorm price."
+                                        errorMessage = "Please enter a valid total dorm price."
+                                        showError = true
+                                        scrollToField("dormTotalAmount")
+                                        return@Button
+                                    }
+                                } else {
+                                    val hasInvalidRate = dormRatesList.take(actualDormNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
+                                    if (hasInvalidRate || dormRatesList.size < actualDormNights) {
+                                        dormTotalAmountError = "All night rates must be greater than 0."
+                                        errorMessage = "All night rates must be greater than 0."
+                                        showError = true
+                                        scrollToField("dormTotalAmount")
+                                        return@Button
+                                    }
+                                }
+
+                                if (manualBedNoToggle) {
+                                    if (manualBedNoText.trim().isEmpty()) {
+                                        dormBedsError = "Please enter bed numbers."
+                                        errorMessage = "Please enter bed numbers."
+                                        showError = true
+                                        scrollToField("dormBeds")
+                                        return@Button
+                                    }
+                                    parsedDormBeds = parseBedNumbers(manualBedNoText, dormRoom)
+                                    if (parsedDormBeds.isEmpty()) {
+                                        dormBedsError = "Please enter valid bed numbers (e.g. 1-4, 6)."
+                                        errorMessage = "Please enter valid bed numbers (e.g. 1-4, 6)."
+                                        showError = true
+                                        scrollToField("dormBeds")
+                                        return@Button
+                                    }
+                                    
+                                    // Validate indices are between 1 and 8
+                                    val invalidBed = parsedDormBeds.any { bed ->
+                                        val num = bed.substring(dormRoom.length).toIntOrNull()
+                                        num == null || num !in 1..8
+                                    }
+                                    if (invalidBed) {
+                                        dormBedsError = "Bed numbers must be between 1 and 8."
+                                        errorMessage = "Bed numbers must be between 1 and 8."
+                                        showError = true
+                                        scrollToField("dormBeds")
+                                        return@Button
+                                    }
+
+                                    if (parsedDormBeds.size != dormBedCount) {
+                                        dormBedsError = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
+                                        errorMessage = "Entered bed numbers count (${parsedDormBeds.size}) does not match selected bed count ($dormBedCount)."
+                                        showError = true
+                                        scrollToField("dormBeds")
+                                        return@Button
+                                    }
+                                } else {
+                                    // Automatic allocation
+                                    val counts = getDormBedBookingCounts(date, actualDormNights, dormRoom, bookings, bookingToEdit?.id)
+                                    val freeBeds = (1..8).filter { (counts[it] ?: 0) == 0 }.sorted()
+                                    val bookedBeds = (1..8).filter { (counts[it] ?: 0) > 0 }.sortedWith(
+                                        compareBy( { counts[it] ?: 0 }, { it } )
+                                    )
+
+                                    val assignedBeds = mutableListOf<Int>()
+                                    if (freeBeds.size >= dormBedCount) {
+                                        assignedBeds.addAll(freeBeds.take(dormBedCount))
+                                    } else {
+                                        assignedBeds.addAll(freeBeds)
+                                        val remainingNeeded = dormBedCount - freeBeds.size
+                                        assignedBeds.addAll(bookedBeds.take(remainingNeeded))
+                                    }
+                                    parsedDormBeds = assignedBeds.sorted().map { "$dormRoom$it" }
+                                }
+                            }
+
+                            // Platform commission validations
+                            if (platform != "Direct") {
+                                val expVal = expensesStr.toDoubleOrNull()
+                                if (expVal == null || expVal < 0.0) {
+                                    expensesError = "Please enter valid platform fees."
+                                    errorMessage = "Please enter valid platform fees."
+                                    showError = true
+                                    return@Button
+                                }
+                            }
+
+                            // 4. Calculate final items allocation values
+                            val actualDormNights = if (platform == "Direct") dormNights else bookingNights
+                            val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
+                            val dormRatesList = dormRates.take(actualDormNights).map { it.toDoubleOrNull() ?: 0.0 }
+                            
+                            val dormShareRatesList = if (actualDormSamePrice) {
+                                val totalEntered = dormRatesList.firstOrNull() ?: 0.0
+                                val ratePerBedPerNight = totalEntered / (actualDormNights.coerceAtLeast(1) * dormBedCount.coerceAtLeast(1))
+                                List(actualDormNights) { ratePerBedPerNight }
+                            } else {
+                                dormRatesList.map { it / dormBedCount.coerceAtLeast(1) }
+                            }
+                            
+                            val totalDormVal = dormShareRatesList.sum() * dormBedCount
+
+                            // Build Dorm booking items list
+                            val dormBookingItems = if (hasDormBooking) {
+                                parsedDormBeds.map { bedNo ->
+                                    BookingItem(
+                                        id = UUID.randomUUID().toString(),
+                                        category = getRoomCategory(bedNo),
+                                        roomNumber = bedNo,
+                                        amount = dormShareRatesList.sum(),
+                                        nights = actualDormNights,
+                                        rates = dormShareRatesList,
+                                        startDate = dormStartDate
+                                    )
+                                }
+                            } else {
+                                emptyList()
+                            }
+
+                            val roomBookingItems = dialogRoomItems.map { item ->
+                                val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                                val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
+                                val ratesList = (itemRatesMap[item.id] ?: listOf("")).take(itemNights).map { it.toDoubleOrNull() ?: 0.0 }
+                                
+                                val ratesPerNight = if (itemSamePrice) {
+                                    val ratePerNight = ratesList.firstOrNull() ?: 0.0
+                                    List(itemNights) { ratePerNight }
+                                } else {
+                                    ratesList
+                                }
+                                
+                                item.copy(
+                                    category = if (item.roomNumber.isNotBlank()) {
+                                        val firstRoom = item.roomNumber.split(",").firstOrNull { it.isNotBlank() } ?: ""
+                                        if (firstRoom.isNotBlank()) getRoomCategory(firstRoom) else item.category
+                                    } else item.category,
+                                    amount = ratesPerNight.sum(),
+                                    nights = itemNights,
+                                    rates = ratesPerNight
+                                )
+                            }
+
+                            val updatedItems = roomBookingItems + dormBookingItems
+                            val calculatedSum = updatedItems.sumOf { it.amount }
+
+                            val finalBillAmount = if (platform == "Direct" && isBillOn) {
+                                val customBill = billAmountStr.toDoubleOrNull()
+                                if (customBill == null || customBill <= 0.0) {
+                                    customBillError = "Please enter a valid custom bill amount."
+                                    errorMessage = "Please enter a valid custom bill amount."
+                                    showError = true
+                                    scrollToField("customBill")
+                                    return@Button
+                                }
+                                customBill
+                            } else {
+                                calculatedSum
+                            }
+
+                            val commissionVal = if (platform != "Direct") {
+                                com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, finalBillAmount).totalDeductions
+                            } else {
+                                0.0
+                            }
+
+                            // Create/Update Booking
+                            val finalGuestName = if (platform == "Direct" && !isBillOn && guestName.trim().isEmpty()) "Direct Guest" else guestName.trim()
+
+                            val dormRoomABedsStr = if (hasDormBooking && dormRoom == "A") {
+                                if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
+                            } else ""
+
+                            val dormRoomBBedsStr = if (hasDormBooking && dormRoom == "B") {
+                                if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
+                            } else ""
+
+                            val finalPayments = if (platform != "Direct") {
+                                listOf(
+                                    PaymentDetail(
+                                        amount = finalBillAmount,
+                                        method = "UPI (Hotel Acc - GPay)"
+                                    )
+                                )
+                            } else if (bookingToEdit == null) {
+                                val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
+                                if (advVal > 0.0) {
+                                    listOf(
+                                        PaymentDetail(
+                                            amount = advVal,
+                                            method = if (advancePaymentIsUnknown) "Unknown" else advancePaymentMethod,
+                                            timestamp = if (advancePaymentIsUnknown) 0L else advancePaymentDate
+                                        )
+                                    )
+                                } else {
+                                    emptyList()
+                                }
+                            } else {
+                                dialogPayments
+                            }
+
+                            val finalCheckInDate = if (platform == "Direct") {
+                                updatedItems.map { it.startDate.takeIf { !it.isNullOrBlank() } ?: date }.minOrNull() ?: date
+                            } else {
+                                date
+                            }
+
+                            val newBooking = Booking(
+                                id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
+                                checkInDate = finalCheckInDate,
+                                platform = platform,
+                                guestName = finalGuestName,
+                                items = updatedItems,
+                                dormBedsSelected = if (hasDormBooking) dormBedCount else 0,
+                                dormRoomABeds = dormRoomABedsStr,
+                                dormRoomBBeds = dormRoomBBedsStr,
+                                dormTotalAmount = totalDormVal,
+                                isBillOn = if (platform == "Direct") isBillOn else true,
+                                billAmount = finalBillAmount,
+                                expenses = commissionVal,
+                                payments = finalPayments,
+                                notes = notes.trim(),
+                                timestamp = bookingToEdit?.timestamp ?: System.currentTimeMillis()
+                            )
+                            onConfirm(newBooking)
+                        }
+                    ) {
+                        Text("Confirm")
                     }
                 } // end buttons Row
             } // end outer Column

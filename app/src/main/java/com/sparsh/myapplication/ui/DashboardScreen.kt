@@ -167,26 +167,45 @@ fun DashboardScreen(
         }
     }
 
-    val periodGross = bookings.sumOf { getBookingFinancialsForPeriod(it).first }
-    val periodExpense = bookings.sumOf { getBookingFinancialsForPeriod(it).second }
+    val periodFinancials = remember(bookings, datePredicate) {
+        var gross = 0.0
+        var expense = 0.0
+        bookings.forEach { b ->
+            val financials = getBookingFinancialsForPeriod(b)
+            gross += financials.first
+            expense += financials.second
+        }
+        Pair(gross, expense)
+    }
+    val periodGross = periodFinancials.first
+    val periodExpense = periodFinancials.second
     val periodNet = periodGross - periodExpense
-    val pendingPaymentsCount = activeBookings.count { it.balance > 0.0 }
+    val pendingPaymentsCount = remember(activeBookings) {
+        activeBookings.count { it.balance > 0.0 }
+    }
 
     // Platform distributions based on period allocations
     val platforms = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
-    val platformCounts = platforms.associateWith { platform ->
-        activeBookings.count { it.platform.equals(platform, ignoreCase = true) }
+    val platformCounts = remember(activeBookings) {
+        platforms.associateWith { platform ->
+            activeBookings.count { it.platform.equals(platform, ignoreCase = true) }
+        }
     }
-    val platformRevenues = platforms.associateWith { platform ->
-        bookings.sumOf { b ->
-            if (b.platform.equals(platform, ignoreCase = true)) {
-                getBookingFinancialsForPeriod(b).first
-            } else {
-                0.0
+    val platformRevenues = remember(bookings, datePredicate) {
+        platforms.associateWith { platform ->
+            bookings.sumOf { b ->
+                if (b.platform.equals(platform, ignoreCase = true)) {
+                    getBookingFinancialsForPeriod(b).first
+                } else {
+                    0.0
+                }
             }
         }
     }
-    val maxPlatformRevenue = platformRevenues.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    val maxPlatformRevenue = remember(platformRevenues) {
+        platformRevenues.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    }
+
 
     // Theme Gradients
     val dashboardGradient = Brush.verticalGradient(

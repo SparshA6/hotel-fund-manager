@@ -381,29 +381,14 @@ fun SettingsScreen(
                                             )
                                         }
 
-                                        Row {
-                                            TextButton(
-                                                onClick = { showRestoreConfirmDialog = backup },
-                                                enabled = !isOperating,
-                                                colors = ButtonDefaults.textButtonColors(
-                                                    contentColor = MaterialTheme.colorScheme.primary
-                                                )
-                                            ) {
-                                                Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            }
-
-                                            IconButton(
-                                                onClick = { showDeleteConfirmDialog = backup },
-                                                enabled = !isOperating,
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Delete backup",
-                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
+                                        TextButton(
+                                            onClick = { showRestoreConfirmDialog = backup },
+                                            enabled = !isOperating,
+                                            colors = ButtonDefaults.textButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        ) {
+                                            Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }

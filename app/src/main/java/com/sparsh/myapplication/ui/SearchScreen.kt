@@ -32,17 +32,19 @@ fun SearchScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedPlatformFilter by remember { mutableStateOf<String?>(null) }
 
-    val filteredBookings = bookings.filter { booking ->
-        val matchesSearch = searchQuery.isBlank() || 
-                booking.guestName.contains(searchQuery, ignoreCase = true) ||
-                booking.items.any { it.roomNumber.contains(searchQuery, ignoreCase = true) } ||
-                booking.dormRoomABeds.contains(searchQuery, ignoreCase = true) ||
-                booking.dormRoomBBeds.contains(searchQuery, ignoreCase = true)
-        
-        val matchesPlatform = selectedPlatformFilter == null || 
-                booking.platform.equals(selectedPlatformFilter, ignoreCase = true)
-                
-        matchesSearch && matchesPlatform
+    val filteredBookings = remember(bookings, searchQuery, selectedPlatformFilter) {
+        bookings.filter { booking ->
+            val matchesSearch = searchQuery.isBlank() || 
+                    booking.guestName.contains(searchQuery, ignoreCase = true) ||
+                    booking.items.any { it.roomNumber.contains(searchQuery, ignoreCase = true) } ||
+                    booking.dormRoomABeds.contains(searchQuery, ignoreCase = true) ||
+                    booking.dormRoomBBeds.contains(searchQuery, ignoreCase = true)
+            
+            val matchesPlatform = selectedPlatformFilter == null || 
+                    booking.platform.equals(selectedPlatformFilter, ignoreCase = true)
+                    
+            matchesSearch && matchesPlatform
+        }
     }
 
     val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
