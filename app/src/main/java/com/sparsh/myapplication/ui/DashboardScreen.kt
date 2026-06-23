@@ -131,12 +131,8 @@ fun DashboardScreen(
                     if (datePredicate(stayDate)) {
                         val dailyRate = item.rates.getOrNull(offset) ?: (item.amount / nights)
                         
-                        // Scale gross by custom bill ratio if applicable
-                        val scaledGross = if (b.isBillOn) {
-                            dailyRate * (b.billAmount / sumOfItemAmounts)
-                        } else {
-                            dailyRate
-                        }
+                        // Scale gross by total booking amount ratio
+                        val scaledGross = dailyRate * (b.amountCharged / sumOfItemAmounts)
                         
                         // Scale expense by rate proportion
                         val scaledExpense = b.expenses * (dailyRate / sumOfItemAmounts)

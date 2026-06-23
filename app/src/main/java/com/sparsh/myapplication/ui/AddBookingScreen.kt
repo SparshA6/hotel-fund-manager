@@ -706,6 +706,8 @@ fun QuickBookDialog(
     var paymentStatus by remember { mutableStateOf("Paid") }
     var paymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
     var notes by remember { mutableStateOf("") }
+    var discountStr by remember { mutableStateOf("") }
+    var extraPriceStr by remember { mutableStateOf("") }
  
     var dialogPayments by remember { mutableStateOf(listOf<PaymentDetail>()) }
     var advancePaymentStr by remember { mutableStateOf("") }
@@ -766,7 +768,9 @@ fun QuickBookDialog(
             paymentStatus = bookingToEdit.paymentStatus
             paymentMethod = bookingToEdit.paymentMethod
             notes = bookingToEdit.notes
-            dialogPayments = bookingToEdit.payments
+            discountStr = if (bookingToEdit.discount == 0.0) "" else formatDouble(bookingToEdit.discount)
+            extraPriceStr = if (bookingToEdit.extraPrice == 0.0) "" else formatDouble(bookingToEdit.extraPrice)
+            dialogPayments = bookingToEdit.payments.filter { it.id != "portal_base" && it.method != "Portal (Auto)" }
  
             advancePaymentStr = ""
             advancePaymentMethod = "UPI (Hotel Acc - GPay)"
@@ -858,7 +862,7 @@ fun QuickBookDialog(
             }
             } else {
                 // Same booking, only update payments
-                dialogPayments = bookingToEdit.payments
+                dialogPayments = bookingToEdit.payments.filter { it.id != "portal_base" && it.method != "Portal (Auto)" }
                 paymentStatus = bookingToEdit.paymentStatus
                 paymentMethod = bookingToEdit.paymentMethod
             }
@@ -873,6 +877,8 @@ fun QuickBookDialog(
             paymentStatus = "Paid"
             paymentMethod = "UPI (Hotel Acc - GPay)"
             notes = ""
+            discountStr = ""
+            extraPriceStr = ""
  
             dialogPayments = emptyList()
             advancePaymentStr = ""
@@ -977,11 +983,17 @@ fun QuickBookDialog(
                         onClick = { selectedTab = 0 },
                         text = { Text("Booking Info", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
                     )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Payment Details", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
-                    )
+                    if (platform == "Direct" || (extraPriceStr.toDoubleOrNull() ?: 0.0) > 0.0) {
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("Payment Details", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        )
+                    } else {
+                        if (selectedTab == 1) {
+                            selectedTab = 0
+                        }
+                    }
                 }
 
                 if (showError) {
@@ -2021,8 +2033,9 @@ fun QuickBookDialog(
                         } else {
                             calculatedSum
                         }
-                        
-                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, totalBillValue)
+                        val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                        val commBase = (totalBillValue - discountVal).coerceAtLeast(0.0)
+                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase)
                         
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -2130,6 +2143,35 @@ fun QuickBookDialog(
                     }
                 }
 
+                // Discount and Extra Price fields
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = discountStr,
+                            onValueChange = { discountStr = it },
+                            label = { Text("Discount (₹)") },
+                            placeholder = { Text("0") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = extraPriceStr,
+                            onValueChange = { extraPriceStr = it },
+                            label = { Text("Extra Charge (₹)") },
+                            placeholder = { Text("0") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true
+                        )
+                    }
+                }
+
                 // Notes
                 item {
                     OutlinedTextField(
@@ -2146,7 +2188,7 @@ fun QuickBookDialog(
                 } // end of selectedTab == 0
                 else { // selectedTab == 1
                     // Payments Details Section
-                    if (platform == "Direct") {
+                    if (platform == "Direct" || (extraPriceStr.toDoubleOrNull() ?: 0.0) > 0.0) {
                         item {
                             Column(
                                 modifier = Modifier
@@ -2179,12 +2221,22 @@ fun QuickBookDialog(
                                     calculatedSum
                                 }
 
+                                val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+                                val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                                
+                                val targetAmount = if (platform == "Direct") {
+                                    totalBillValue + extraPriceVal - discountVal
+                                } else {
+                                    extraPriceVal
+                                }
+
                                 if (bookingToEdit == null) {
                                     // New Booking: Show Advance Payment
+                                    val labelText = if (platform != "Direct") "Advance for Extra Charge" else "Advance Payment Amount"
                                     OutlinedTextField(
                                         value = advancePaymentStr,
                                         onValueChange = { advancePaymentStr = it },
-                                        label = { Text("Advance Payment Amount") },
+                                        label = { Text(labelText) },
                                         placeholder = { Text("e.g. 1000 (0 for none)") },
                                         prefix = { Text("₹ ") },
                                         modifier = Modifier.fillMaxWidth(),
@@ -2297,7 +2349,7 @@ fun QuickBookDialog(
                                 } else {
                                     // Edit Booking: Show list of payments and allow adding new ones
                                     val totalPaidVal = dialogPayments.sumOf { it.amount }
-                                    val balanceVal = totalBillValue - totalPaidVal
+                                    val balanceVal = targetAmount - totalPaidVal
  
                                     if (dialogPayments.isEmpty()) {
                                         Text(
@@ -2324,8 +2376,15 @@ fun QuickBookDialog(
                                                         val updatedPayments = dialogPayments.filter { it.id != p.id }
                                                         dialogPayments = updatedPayments
                                                         if (bookingToEdit != null) {
+                                                            val finalUpdatedPayments = if (platform != "Direct") {
+                                                                val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
+                                                                    ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
+                                                                listOf(portalBase) + updatedPayments
+                                                            } else {
+                                                                updatedPayments
+                                                            }
                                                             val updatedBooking = bookingToEdit.copy(
-                                                                payments = updatedPayments
+                                                                payments = finalUpdatedPayments
                                                             )
                                                             if (onSaveWithoutDismiss != null) {
                                                                 onSaveWithoutDismiss(updatedBooking)
@@ -2353,14 +2412,25 @@ fun QuickBookDialog(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text("Total: ₹${formatDouble(totalBillValue)}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                        Text("Paid: ₹${formatDouble(totalPaidVal)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                                        Text(
-                                            text = "Balance: ₹${formatDouble(balanceVal)}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                        )
+                                        if (platform == "Direct") {
+                                            Text("Total: ₹${formatDouble(targetAmount)}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text("Paid: ₹${formatDouble(totalPaidVal)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                            Text(
+                                                text = "Balance: ₹${formatDouble(balanceVal)}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                            )
+                                        } else {
+                                            Text("Extra Charge: ₹${formatDouble(extraPriceVal)}", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                            Text("Paid at Prop: ₹${formatDouble(totalPaidVal)}", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                            Text(
+                                                text = "Prop Balance: ₹${formatDouble(balanceVal)}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = if (balanceVal > 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                     if (balanceVal > 0.0) {
                                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -2450,8 +2520,15 @@ fun QuickBookDialog(
                                                         newPaymentDate = System.currentTimeMillis() // Reset to current date
                                                         newPaymentIsUnknown = false // Reset checkbox
                                                         if (bookingToEdit != null) {
+                                                            val finalUpdatedPayments = if (platform != "Direct") {
+                                                                val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
+                                                                    ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
+                                                                listOf(portalBase) + updatedPayments
+                                                            } else {
+                                                                updatedPayments
+                                                            }
                                                             val updatedBooking = bookingToEdit.copy(
-                                                                payments = updatedPayments
+                                                                payments = finalUpdatedPayments
                                                             )
                                                             if (onSaveWithoutDismiss != null) {
                                                                 onSaveWithoutDismiss(updatedBooking)
@@ -2869,8 +2946,12 @@ fun QuickBookDialog(
                                 calculatedSum
                             }
 
+                            val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                            val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+
                             val commissionVal = if (platform != "Direct") {
-                                com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, finalBillAmount).totalDeductions
+                                val commBase = (finalBillAmount - discountVal).coerceAtLeast(0.0)
+                                com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase).totalDeductions
                             } else {
                                 0.0
                             }
@@ -2887,12 +2968,29 @@ fun QuickBookDialog(
                             } else ""
 
                             val finalPayments = if (platform != "Direct") {
-                                listOf(
-                                    PaymentDetail(
-                                        amount = finalBillAmount,
-                                        method = "UPI (Hotel Acc - GPay)"
-                                    )
+                                val basePayment = PaymentDetail(
+                                    id = "portal_base",
+                                    amount = finalBillAmount - discountVal,
+                                    method = "Portal (Auto)",
+                                    timestamp = bookingToEdit?.payments?.firstOrNull { it.id == "portal_base" }?.timestamp ?: System.currentTimeMillis()
                                 )
+                                val extraPayments = if (bookingToEdit == null) {
+                                    val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
+                                    if (advVal > 0.0) {
+                                        listOf(
+                                            PaymentDetail(
+                                                amount = advVal,
+                                                method = if (advancePaymentIsUnknown) "Unknown" else advancePaymentMethod,
+                                                timestamp = if (advancePaymentIsUnknown) 0L else advancePaymentDate
+                                            )
+                                        )
+                                    } else {
+                                        emptyList()
+                                    }
+                                } else {
+                                    dialogPayments
+                                }
+                                listOf(basePayment) + extraPayments
                             } else if (bookingToEdit == null) {
                                 val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
                                 if (advVal > 0.0) {
@@ -2931,6 +3029,8 @@ fun QuickBookDialog(
                                 expenses = commissionVal,
                                 payments = finalPayments,
                                 notes = notes.trim(),
+                                discount = discountVal,
+                                extraPrice = extraPriceVal,
                                 timestamp = bookingToEdit?.timestamp ?: System.currentTimeMillis()
                             )
                             onConfirm(newBooking)

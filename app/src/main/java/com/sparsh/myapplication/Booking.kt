@@ -203,10 +203,15 @@ data class Booking(
     val expenses: Double,
     val payments: List<PaymentDetail> = emptyList(),
     val notes: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val discount: Double = 0.0,
+    val extraPrice: Double = 0.0
 ) {
-    val amountCharged: Double
+    val baseAmountCharged: Double
         get() = if (isBillOn) billAmount else (items.filter { it.category != "Dorm" && it.category != "Dorm Bed" }.sumOf { it.amount } + dormTotalAmount)
+
+    val amountCharged: Double
+        get() = baseAmountCharged + extraPrice - discount
 
     val totalPaid: Double
         get() = payments.sumOf { it.amount }
@@ -214,9 +219,11 @@ data class Booking(
     val balance: Double
         get() = amountCharged - totalPaid
 
-    val paymentStatus: String = if (balance <= 0.0) "Paid" else "Pending"
+    val paymentStatus: String
+        get() = if (balance <= 0.0) "Paid" else "Pending"
 
-    val paymentMethod: String = if (payments.isNotEmpty()) payments.last().method else "UPI"
+    val paymentMethod: String
+        get() = if (payments.isNotEmpty()) payments.last().method else "UPI"
 
     val isAssigned: Boolean
         get() {
@@ -256,6 +263,8 @@ data class Booking(
         
         json.put("notes", notes)
         json.put("timestamp", timestamp)
+        json.put("discount", discount)
+        json.put("extraPrice", extraPrice)
         return json
     }
 
@@ -315,6 +324,9 @@ data class Booking(
                 }
             }
 
+            val discountVal = json.optDouble("discount", 0.0)
+            val extraPriceVal = json.optDouble("extraPrice", 0.0)
+
             return Booking(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 checkInDate = json.getString("checkInDate"),
@@ -330,7 +342,9 @@ data class Booking(
                 expenses = json.optDouble("expenses", 0.0),
                 payments = paymentsList,
                 notes = json.optString("notes", ""),
-                timestamp = json.optLong("timestamp", System.currentTimeMillis())
+                timestamp = json.optLong("timestamp", System.currentTimeMillis()),
+                discount = discountVal,
+                extraPrice = extraPriceVal
             )
         }
     }

@@ -472,8 +472,18 @@ fun AddUnassignedBookingDialog(
     var checkInDate by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.checkInDate ?: currentDateStr) }
     var platform by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.platform ?: "Direct") }
     var notes by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.notes ?: "") }
-
-    var dialogPayments by remember(bookingToEdit) { mutableStateOf(bookingToEdit?.payments ?: emptyList()) }
+    var discountStr by remember(bookingToEdit?.id) {
+        mutableStateOf(if (bookingToEdit == null || bookingToEdit.discount == 0.0) "" else formatDouble(bookingToEdit.discount))
+    }
+    var extraPriceStr by remember(bookingToEdit?.id) {
+        mutableStateOf(if (bookingToEdit == null || bookingToEdit.extraPrice == 0.0) "" else formatDouble(bookingToEdit.extraPrice))
+    }
+ 
+    var dialogPayments by remember(bookingToEdit) {
+        mutableStateOf(
+            bookingToEdit?.payments?.filter { it.id != "portal_base" && it.method != "Portal (Auto)" } ?: emptyList()
+        )
+    }
     var advancePaymentStr by remember(bookingToEdit?.id) { mutableStateOf("") }
     var newPaymentAmountStr by remember { mutableStateOf("") }
     var newPaymentMethod by remember { mutableStateOf("UPI (Hotel Acc - GPay)") }
@@ -1151,7 +1161,7 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Payments Details Section
-                if (platform == "Direct") {
+                if (platform == "Direct" || (extraPriceStr.toDoubleOrNull() ?: 0.0) > 0.0) {
                     item {
                         Column(
                             modifier = Modifier
@@ -1176,13 +1186,22 @@ fun AddUnassignedBookingDialog(
                             )
 
                             val totalBillValue = selectedAllocations.sumOf { it.rate.toDoubleOrNull() ?: 0.0 }
+                            val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+                            val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+
+                            val targetAmount = if (platform == "Direct") {
+                                totalBillValue + extraPriceVal - discountVal
+                            } else {
+                                extraPriceVal
+                            }
 
                             if (bookingToEdit == null) {
                                 // New Booking: Show Advance Payment
+                                val labelText = if (platform != "Direct") "Advance for Extra Charge" else "Advance Amount"
                                 OutlinedTextField(
                                     value = advancePaymentStr,
                                     onValueChange = { advancePaymentStr = it },
-                                    label = { Text("Advance Amount") },
+                                    label = { Text(labelText) },
                                     placeholder = { Text("e.g. 1000 (0 for none)") },
                                     prefix = { Text("₹ ") },
                                     modifier = Modifier.fillMaxWidth(),
@@ -1486,7 +1505,9 @@ fun AddUnassignedBookingDialog(
                 // Dynamic OTA Commission Calculation Display Label
                 if (platform != "Direct") {
                     item {
-                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, totalBillValue)
+                        val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                        val commBase = (totalBillValue - discountVal).coerceAtLeast(0.0)
+                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase)
                         
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -1627,6 +1648,35 @@ fun AddUnassignedBookingDialog(
                     }
                 }
 
+                // Discount and Extra Price fields
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = discountStr,
+                            onValueChange = { discountStr = it },
+                            label = { Text("Discount (₹)") },
+                            placeholder = { Text("0") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = extraPriceStr,
+                            onValueChange = { extraPriceStr = it },
+                            label = { Text("Extra Charge (₹)") },
+                            placeholder = { Text("0") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true
+                        )
+                    }
+                }
+
                 // Notes / Remarks
                 item {
                     OutlinedTextField(
@@ -1743,14 +1793,34 @@ fun AddUnassignedBookingDialog(
                         totalAmount
                     }
 
+                    val discountVal = discountStr.toDoubleOrNull() ?: 0.0
+                    val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+
                     // Construct payments
                     val finalPayments = if (platform != "Direct") {
-                        listOf(
-                            PaymentDetail(
-                                amount = finalBillAmount,
-                                method = "UPI (Hotel Acc - GPay)"
-                            )
+                        val basePayment = PaymentDetail(
+                            id = "portal_base",
+                            amount = finalBillAmount - discountVal,
+                            method = "Portal (Auto)",
+                            timestamp = bookingToEdit?.payments?.firstOrNull { it.id == "portal_base" }?.timestamp ?: System.currentTimeMillis()
                         )
+                        val extraPayments = if (bookingToEdit != null) {
+                            dialogPayments
+                        } else {
+                            val initialPayments = mutableListOf<PaymentDetail>()
+                            val advVal = advancePaymentStr.toDoubleOrNull() ?: 0.0
+                            if (advVal > 0.0) {
+                                initialPayments.add(
+                                    PaymentDetail(
+                                        amount = advVal,
+                                        method = if (advancePaymentIsUnknown) "Unknown" else advancePaymentMethod,
+                                        timestamp = if (advancePaymentIsUnknown) 0L else System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            initialPayments
+                        }
+                        listOf(basePayment) + extraPayments
                     } else if (bookingToEdit != null) {
                         dialogPayments
                     } else {
@@ -1784,12 +1854,15 @@ fun AddUnassignedBookingDialog(
                         isBillOn = if (platform == "Direct") isBillOn else true,
                         billAmount = finalBillAmount,
                         expenses = if (platform != "Direct") {
-                            com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, finalBillAmount).totalDeductions
+                            val commBase = (finalBillAmount - discountVal).coerceAtLeast(0.0)
+                            com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase).totalDeductions
                         } else {
                             0.0
                         },
                         payments = finalPayments,
                         notes = notes.trim(),
+                        discount = discountVal,
+                        extraPrice = extraPriceVal,
                         timestamp = bookingToEdit?.timestamp ?: System.currentTimeMillis()
                     )
 

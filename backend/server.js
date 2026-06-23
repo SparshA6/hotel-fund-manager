@@ -120,6 +120,8 @@ const BookingSchema = new mongoose.Schema({
   paymentMethod: { type: String, required: true },
   payments: [PaymentDetailSchema],
   notes: { type: String, default: "" },
+  discount: { type: Number, default: 0.0 },
+  extraPrice: { type: Number, default: 0.0 },
   timestamp: { type: Number, required: true }
 });
 
