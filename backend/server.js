@@ -3,13 +3,21 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+
+// Static uploads configuration
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -122,6 +130,8 @@ const BookingSchema = new mongoose.Schema({
   notes: { type: String, default: "" },
   discount: { type: Number, default: 0.0 },
   extraPrice: { type: Number, default: 0.0 },
+  idDocumentType: { type: String, default: "" },
+  idDocumentUrl: { type: String, default: "" },
   timestamp: { type: Number, required: true }
 });
 
@@ -334,6 +344,134 @@ app.delete('/api/backups/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting backup:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+async function uploadToGoogleDrive(buffer, fileName, mimeType) {
+  if (!process.env.GOOGLE_CREDENTIALS) {
+    console.warn("GOOGLE_CREDENTIALS env variable is not set. Google Drive upload is skipped.");
+    return null;
+  }
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.JWT(
+      credentials.client_email,
+      null,
+      credentials.private_key,
+      ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
+    );
+    const drive = google.drive({ version: 'v3', auth });
+    
+    const { Readable } = require('stream');
+    const stream = new Readable();
+    stream.push(buffer);
+    stream.push(null);
+    
+    const fileMetadata = {
+      name: fileName,
+      parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : []
+    };
+    const media = {
+      mimeType: mimeType,
+      body: stream
+    };
+    
+    console.log("Uploading file to Google Drive...");
+    const file = await drive.files.create({
+      resource: fileMetadata,
+      media: media,
+      fields: 'id, webViewLink, webContentLink'
+    });
+    
+    console.log("File uploaded successfully to Drive. File ID:", file.data.id);
+    
+    try {
+      await drive.permissions.create({
+        fileId: file.data.id,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone'
+        }
+      });
+      console.log("Drive file permissions updated to anyone/reader.");
+    } catch (permError) {
+      console.warn("Could not share file publicly:", permError.message);
+    }
+    
+    return file.data.webViewLink || file.data.webContentLink;
+  } catch (error) {
+    console.error("Google Drive upload failed:", error);
+    return null;
+  }
+}
+
+app.post('/api/bookings/:id/upload-id', async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const { idDocumentType, imageContentBase64, imageName } = req.body;
+    
+    if (!idDocumentType || !imageContentBase64) {
+      return res.status(400).json({ error: 'Missing required fields (idDocumentType, imageContentBase64)' });
+    }
+    
+    // Parse MIME type and extract base64 raw string
+    let base64Data = imageContentBase64;
+    let mimeType = 'image/jpeg';
+    if (base64Data.startsWith('data:')) {
+      const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        mimeType = matches[1];
+        base64Data = matches[2];
+      }
+    }
+    
+    const buffer = Buffer.from(base64Data, 'base64');
+    const extension = mimeType.split('/')[1] || 'jpg';
+    const cleanFileName = `id_${bookingId}_${Date.now()}.${extension}`;
+    
+    // 1. Try uploading to Google Drive
+    let documentUrl = await uploadToGoogleDrive(buffer, cleanFileName, mimeType);
+    
+    // 2. If Drive upload failed/skipped, save locally as fallback
+    if (!documentUrl) {
+      console.log("Falling back to local static file storage.");
+      const localPath = path.join(uploadsDir, cleanFileName);
+      fs.writeFileSync(localPath, buffer);
+      
+      const protocol = req.protocol;
+      const host = req.get('host');
+      documentUrl = `${protocol}://${host}/uploads/${cleanFileName}`;
+    }
+    
+    console.log(`Document URL generated: ${documentUrl}`);
+    
+    // 3. Update the booking in Database/JSON file
+    let updatedBooking = null;
+    if (isUsingMongoDB) {
+      updatedBooking = await Booking.findOneAndUpdate(
+        { id: bookingId },
+        { idDocumentType, idDocumentUrl: documentUrl },
+        { new: true }
+      );
+    } else {
+      const bookings = readLocalBookings();
+      const index = bookings.findIndex(b => b.id === bookingId);
+      if (index !== -1) {
+        bookings[index].idDocumentType = idDocumentType;
+        bookings[index].idDocumentUrl = documentUrl;
+        writeLocalBookings(bookings);
+        updatedBooking = bookings[index];
+      }
+    }
+    
+    if (!updatedBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    res.json(updatedBooking);
+  } catch (error) {
+    console.error('Error uploading ID document:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

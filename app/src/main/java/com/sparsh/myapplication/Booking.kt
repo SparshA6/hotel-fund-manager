@@ -205,10 +205,48 @@ data class Booking(
     val notes: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val discount: Double = 0.0,
-    val extraPrice: Double = 0.0
+    val extraPrice: Double = 0.0,
+    val idDocumentType: String = "",
+    val idDocumentUrl: String = ""
 ) {
+    fun spansDate(targetDate: String): Boolean {
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val checkIn = sdf.parse(checkInDate)
+            val target = sdf.parse(targetDate)
+            if (checkIn == null || target == null) return false
+            
+            val totalNights = items.maxOfOrNull { it.nights } ?: if (dormBedsSelected > 0) 1 else 1
+            
+            val calendar = java.util.Calendar.getInstance()
+            calendar.time = checkIn
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, totalNights)
+            val checkOut = calendar.time
+            
+            !target.before(checkIn) && !target.after(checkOut)
+        } catch (e: Exception) {
+            checkInDate == targetDate
+        }
+    }
+
+    val checkOutDate: String
+        get() {
+            return try {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                val checkIn = sdf.parse(checkInDate)
+                val totalNights = items.maxOfOrNull { it.nights } ?: if (dormBedsSelected > 0) 1 else 1
+                val calendar = java.util.Calendar.getInstance()
+                calendar.time = checkIn!!
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, totalNights)
+                sdf.format(calendar.time)
+            } catch (e: Exception) {
+                checkInDate
+            }
+        }
+
     val baseAmountCharged: Double
         get() = if (isBillOn) billAmount else (items.filter { it.category != "Dorm" && it.category != "Dorm Bed" }.sumOf { it.amount } + dormTotalAmount)
+
 
     val amountCharged: Double
         get() = baseAmountCharged + extraPrice - discount
@@ -265,6 +303,8 @@ data class Booking(
         json.put("timestamp", timestamp)
         json.put("discount", discount)
         json.put("extraPrice", extraPrice)
+        json.put("idDocumentType", idDocumentType)
+        json.put("idDocumentUrl", idDocumentUrl)
         return json
     }
 
@@ -301,12 +341,17 @@ data class Booking(
             val billAmountValue = json.optDouble("billAmount", defaultBillAmount)
 
             val paymentsList = mutableListOf<PaymentDetail>()
+            var hasPayments = false
             if (json.has("payments")) {
                 val paymentsArray = json.getJSONArray("payments")
-                for (i in 0 until paymentsArray.length()) {
-                    paymentsList.add(PaymentDetail.fromJsonObject(paymentsArray.getJSONObject(i)))
+                if (paymentsArray.length() > 0) {
+                    hasPayments = true
+                    for (i in 0 until paymentsArray.length()) {
+                        paymentsList.add(PaymentDetail.fromJsonObject(paymentsArray.getJSONObject(i)))
+                    }
                 }
-            } else {
+            }
+            if (!hasPayments) {
                 // Synthesize payment list for backward compatibility
                 val status = json.optString("paymentStatus", "Pending")
                 val method = json.optString("paymentMethod", "UPI")
@@ -323,6 +368,7 @@ data class Booking(
                     )
                 }
             }
+
 
             val discountVal = json.optDouble("discount", 0.0)
             val extraPriceVal = json.optDouble("extraPrice", 0.0)
@@ -344,7 +390,9 @@ data class Booking(
                 notes = json.optString("notes", ""),
                 timestamp = json.optLong("timestamp", System.currentTimeMillis()),
                 discount = discountVal,
-                extraPrice = extraPriceVal
+                extraPrice = extraPriceVal,
+                idDocumentType = json.optString("idDocumentType", ""),
+                idDocumentUrl = json.optString("idDocumentUrl", "")
             )
         }
     }

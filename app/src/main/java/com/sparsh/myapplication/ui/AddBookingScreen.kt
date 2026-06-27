@@ -38,9 +38,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import java.io.File
+import android.net.Uri
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.Manifest
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog
 import com.sparsh.myapplication.Booking
+import com.sparsh.myapplication.BookingRepository
 import com.sparsh.myapplication.BookingItem
 import com.sparsh.myapplication.PaymentDetail
 import com.sparsh.myapplication.getRoomCategory
@@ -81,6 +96,7 @@ fun AddBookingScreen(
     bookings: List<Booking> = emptyList(),
     onAddBooking: (Booking) -> Unit,
     onDeleteBooking: (String) -> Unit = {},
+    bookingRepository: BookingRepository,
     modifier: Modifier = Modifier
 ) {
     val formBackground = Brush.verticalGradient(
@@ -152,6 +168,7 @@ fun AddBookingScreen(
             bookings = bookings,
             onAddBooking = onAddBooking,
             onDeleteBooking = onDeleteBooking,
+            bookingRepository = bookingRepository,
             isDormMode = (selectedViewMode == 1),
             modifier = Modifier.fillMaxSize()
         )
@@ -253,6 +270,7 @@ fun AddBookingGridView(
     bookings: List<Booking>,
     onAddBooking: (Booking) -> Unit,
     onDeleteBooking: (String) -> Unit,
+    bookingRepository: BookingRepository,
     isDormMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -648,7 +666,7 @@ fun AddBookingGridView(
                 selectedCellRoom = null
             },
             onEditBookingClick = { booking ->
-                selectedDateForBooking = selectedCellDate
+                selectedDateForBooking = booking.checkInDate
                 selectedRoomForBooking = selectedCellRoom
                 bookingToEditInDialog = booking
                 selectedCellDate = null
@@ -664,6 +682,7 @@ fun AddBookingGridView(
             bookings = bookings,
             bookingToEdit = bookingToEditInDialog,
             isDormMode = isDormMode,
+            bookingRepository = bookingRepository,
             onDismiss = {
                 selectedDateForBooking = null
                 selectedRoomForBooking = null
@@ -692,6 +711,7 @@ fun QuickBookDialog(
     bookings: List<Booking> = emptyList(),
     bookingToEdit: Booking? = null,
     isDormMode: Boolean = false,
+    bookingRepository: BookingRepository,
     onDismiss: () -> Unit,
     onConfirm: (Booking) -> Unit,
     onDelete: ((String) -> Unit)? = null,
@@ -2352,6 +2372,7 @@ fun QuickBookDialog(
                                     // Edit Booking: Show list of payments and allow adding new ones
                                     val totalPaidVal = dialogPayments.sumOf { it.amount }
                                     val balanceVal = targetAmount - totalPaidVal
+                                    android.util.Log.e("QuickBookDialog", "RECOMPOSING PAYMENTS: targetAmount=$targetAmount, totalPaidVal=$totalPaidVal, balanceVal=$balanceVal, isBillOn=$isBillOn, billAmountStr=$billAmountStr, dialogRoomItemsSize=${dialogRoomItems.size}, dialogRoomItems=${dialogRoomItems.map { "${it.roomNumber}:${it.amount}" }}")
  
                                     if (dialogPayments.isEmpty()) {
                                         Text(
@@ -2434,7 +2455,7 @@ fun QuickBookDialog(
                                             )
                                         }
                                     }
-                                    if (balanceVal > 0.0) {
+                                     if (true) {
                                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                         Text("Record Additional Payment", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         
@@ -2621,13 +2642,25 @@ fun QuickBookDialog(
                             }
                         }
                     }
+                    if (bookingToEdit != null) {
+                        item {
+                            IdDocumentUploadSection(
+                                booking = bookingToEdit,
+                                bookingRepository = bookingRepository,
+                                onBookingUpdated = { updatedBooking ->
+                                    if (onSaveWithoutDismiss != null) {
+                                        onSaveWithoutDismiss(updatedBooking)
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             } // end LazyColumn
         } // end weight(1f) Column
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                // Bottom buttons row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2635,10 +2668,6 @@ fun QuickBookDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
                     if (bookingToEdit != null && onDelete != null) {
                         var showDeleteConfirm by remember { mutableStateOf(false) }
                         if (showDeleteConfirm) {
@@ -2680,8 +2709,13 @@ fun QuickBookDialog(
                         ) {
                             Text("Delete", fontWeight = FontWeight.Bold)
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                     }
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Button(
                         onClick = {
                             // Clear previous errors
@@ -2865,16 +2899,7 @@ fun QuickBookDialog(
                                 }
                             }
 
-                            // Platform commission validations
-                            if (platform != "Direct") {
-                                val expVal = expensesStr.toDoubleOrNull()
-                                if (expVal == null || expVal < 0.0) {
-                                    expensesError = "Please enter valid platform fees."
-                                    errorMessage = "Please enter valid platform fees."
-                                    showError = true
-                                    return@Button
-                                }
-                            }
+
 
                             // 4. Calculate final items allocation values
                             val actualDormNights = if (platform == "Direct") dormNights else bookingNights
@@ -3253,4 +3278,304 @@ fun getDormBedBookingCounts(
     
     return counts
 }
+
+@Composable
+fun IdDocumentUploadSection(
+    booking: Booking,
+    bookingRepository: BookingRepository,
+    onBookingUpdated: (Booking) -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    var showIdDropdown by remember { mutableStateOf(false) }
+    var selectedIdType by remember { mutableStateOf("Aadhaar Card") }
+    val idTypes = listOf("Aadhaar Card", "Passport", "Driving License", "PAN Card", "Voter ID", "Other")
+    
+    var isUploading by remember { mutableStateOf(false) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+    
+    // Create uri for temporary file to save camera capture
+    val file = remember {
+        java.io.File(context.cacheDir, "temp_id_capture.jpg")
+    }
+    val uri = remember {
+        androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+    }
+    
+    // Helper to read bytes from Uri and convert to Base64
+    fun uriToBase64(imageUri: android.net.Uri): String? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(imageUri)
+            val bytes = inputStream?.readBytes()
+            inputStream?.close()
+            if (bytes != null) {
+                var bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    val maxDimension = 600
+                    val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                    val newWidth = if (ratio > 1) {
+                        if (bitmap.width > maxDimension) maxDimension else bitmap.width
+                    } else {
+                        if (bitmap.height > maxDimension) (maxDimension * ratio).toInt() else bitmap.width
+                    }
+                    val newHeight = if (ratio > 1) {
+                        if (bitmap.width > maxDimension) (maxDimension / ratio).toInt() else bitmap.height
+                    } else {
+                        if (bitmap.height > maxDimension) maxDimension else bitmap.height
+                    }
+                    bitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                    
+                    val outputStream = java.io.ByteArrayOutputStream()
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, outputStream)
+                    val compressedBytes = outputStream.toByteArray()
+                    android.util.Base64.encodeToString(compressedBytes, android.util.Base64.DEFAULT)
+                } else {
+                    android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                }
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    // Upload image to backend
+    fun startUpload(imageUri: android.net.Uri) {
+        val base64 = uriToBase64(imageUri)
+        if (base64 == null) {
+            uploadError = "Failed to process image file."
+            return
+        }
+        
+        isUploading = true
+        uploadError = null
+        coroutineScope.launch {
+            val updated = bookingRepository.uploadIdDocument(
+                bookingId = booking.id,
+                idType = selectedIdType,
+                imageBase64 = base64,
+                fileName = "id_${booking.id}.jpg"
+            )
+            isUploading = false
+            if (updated != null) {
+                onBookingUpdated(updated)
+                Toast.makeText(context, "ID document uploaded successfully!", Toast.LENGTH_SHORT).show()
+            } else {
+                uploadError = "Upload failed. Please check network/server connection."
+            }
+        }
+    }
+    
+    // Launchers for Camera and Gallery
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            startUpload(android.net.Uri.fromFile(file))
+        }
+    }
+    
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { imageUri ->
+        if (imageUri != null) {
+            startUpload(imageUri)
+        }
+    }
+
+    // Permission launcher for Camera
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            cameraLauncher.launch(uri)
+        } else {
+            Toast.makeText(context, "Camera permission is required to scan ID.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Guest ID Verification",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            
+            if (booking.idDocumentUrl.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Document Type: ${booking.idDocumentType}",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "Status: Uploaded & Verified",
+                            fontSize = 11.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val browserIntent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(booking.idDocumentUrl)
+                        )
+                        Button(
+                            onClick = { context.startActivity(browserIntent) },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Text("View", fontSize = 11.sp)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    val updated = booking.copy(
+                                        idDocumentType = "",
+                                        idDocumentUrl = ""
+                                    )
+                                    bookingRepository.saveBooking(updated)
+                                    onBookingUpdated(updated)
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Delete", fontSize = 11.sp)
+                        }
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { showIdDropdown = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("ID Type: $selectedIdType", fontSize = 12.sp)
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Dropdown"
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = showIdDropdown,
+                            onDismissRequest = { showIdDropdown = false },
+                            modifier = Modifier.fillMaxWidth(0.85f)
+                        ) {
+                            idTypes.forEach { id ->
+                                DropdownMenuItem(
+                                    text = { Text(id) },
+                                    onClick = {
+                                        selectedIdType = id
+                                        showIdDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    
+                    if (isUploading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Uploading to Google Drive...", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.CAMERA
+                                    )
+                                    if (permissionCheck == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        cameraLauncher.launch(uri)
+                                    } else {
+                                        permissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("Scan / Take Photo", fontSize = 11.sp)
+                            }
+                            
+                            OutlinedButton(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Upload Photo", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    
+                    uploadError?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 

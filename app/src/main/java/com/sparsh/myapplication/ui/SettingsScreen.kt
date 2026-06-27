@@ -30,11 +30,17 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     bookingRepository: BookingRepository,
+    isStaffMode: Boolean,
+    onRoleChanged: (Boolean) -> Unit,
     onRestored: (List<Booking>) -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinText by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
 
     var taxRateStr by remember { mutableStateOf(SettingsManager.getTaxRate(context).toString()) }
     var tdsRateStr by remember { mutableStateOf(SettingsManager.getTdsRate(context).toString()) }
@@ -165,9 +171,79 @@ fun SettingsScreen(
                 }
             }
 
-            // General Rates Card
+            // User Role Management Card
             item {
                 Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isStaffMode) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "User Role Management",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = if (isStaffMode) {
+                                "Current Role: STAFF (Restricted to current day's bookings only)"
+                            } else {
+                                "Current Role: ADMIN (Full access to all bookings and system tools)"
+                            },
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Button(
+                            onClick = {
+                                if (isStaffMode) {
+                                    showPinDialog = true
+                                } else {
+                                    onRoleChanged(true)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isStaffMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text(
+                                text = if (isStaffMode) "Switch to Admin Mode" else "Switch to Staff Mode",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Button(
+                            onClick = onLogout,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Log Out Account",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (!isStaffMode) {
+                // General Rates Card
+                item {
+                    Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -433,7 +509,67 @@ fun SettingsScreen(
                     Text("Save Settings", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
+            }
         }
+    }
+
+    // PIN Confirmation Dialog
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showPinDialog = false
+                pinText = ""
+                pinError = null
+            },
+            title = { Text("Enter Admin PIN", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Please enter the 4-digit admin PIN to switch back to Admin Mode.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pinText,
+                        onValueChange = { 
+                            pinText = it
+                            if (it.length <= 4) pinError = null
+                        },
+                        label = { Text("Admin PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        isError = pinError != null,
+                        supportingText = pinError?.let { { Text(it) } },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pinText == "1234") {
+                            onRoleChanged(false)
+                            showPinDialog = false
+                            pinText = ""
+                            pinError = null
+                        } else {
+                            pinError = "Incorrect PIN. Try again."
+                        }
+                    }
+                ) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPinDialog = false
+                        pinText = ""
+                        pinError = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Restore Confirmation Dialog

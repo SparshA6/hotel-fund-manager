@@ -101,6 +101,26 @@ class BookingRepository(context: Context) {
         }
     }
 
+    /**
+     * Uploads the ID document. Syncs to cloud and updates local cache.
+     */
+    suspend fun uploadIdDocument(bookingId: String, idType: String, imageBase64: String, fileName: String): Booking? = withContext(Dispatchers.IO) {
+        try {
+            Log.d("BookingRepository", "Uploading ID document for booking $bookingId...")
+            val updatedBooking = api.uploadIdDocument(bookingId, UploadIdRequest(idType, imageBase64, fileName))
+            Log.d("BookingRepository", "Uploaded ID document successfully. Updating local cache.")
+            // Update local cache
+            val localBookings = getLocalBookings().toMutableList()
+            localBookings.removeAll { it.id == updatedBooking.id }
+            localBookings.add(updatedBooking)
+            saveAllLocalBookings(localBookings)
+            updatedBooking
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to upload ID document: ${e.message}")
+            null
+        }
+    }
+
     // --- Local Caching Helpers ---
 
     fun getLocalBookings(): List<Booking> {

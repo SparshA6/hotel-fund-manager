@@ -28,6 +28,8 @@ import com.sparsh.myapplication.ui.AddUnassignedBookingDialog
 
 import com.sparsh.myapplication.ui.BookingsScreen
 import com.sparsh.myapplication.ui.SettingsScreen
+import com.sparsh.myapplication.ui.LoginScreen
+import com.sparsh.myapplication.ui.StaffDashboardScreen
 import com.sparsh.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -45,14 +47,44 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
+                val prefs = remember { getSharedPreferences("hotel_fund_prefs", android.content.Context.MODE_PRIVATE) }
+                var isLoggedIn by remember { mutableStateOf(prefs.getBoolean("is_logged_in", false)) }
+                var isStaffMode by remember { mutableStateOf(prefs.getBoolean("is_staff_mode", false)) }
+                val onRoleChanged = { isStaff: Boolean ->
+                    isStaffMode = isStaff
+                    prefs.edit().putBoolean("is_staff_mode", isStaff).apply()
+                }
+                val onLoginSuccess = { isStaff: Boolean ->
+                    isStaffMode = isStaff
+                    isLoggedIn = true
+                    prefs.edit()
+                        .putBoolean("is_staff_mode", isStaff)
+                        .putBoolean("is_logged_in", true)
+                        .apply()
+                }
+                val onLogout = {
+                    isLoggedIn = false
+                    prefs.edit().putBoolean("is_logged_in", false).apply()
+                }
+
+                val todayStr = remember {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                }
+
                 var currentTab by remember { mutableStateOf(0) }
                 var bookingToEdit by remember { mutableStateOf<Booking?>(null) }
                 val bookings = remember { mutableStateOf<List<Booking>>(bookingRepository.getLocalBookings()) }
                 val coroutineScope = rememberCoroutineScope()
                 var isLoading by remember { mutableStateOf(true) }
+
+                val displayedBookings = if (isStaffMode) {
+                    bookings.value.filter { it.spansDate(todayStr) }
+                } else {
+                    bookings.value
+                }
  
-                LaunchedEffect(currentTab) {
-                    if (currentTab == 0 || currentTab == 1 || currentTab == 2) {
+                LaunchedEffect(currentTab, isLoggedIn) {
+                    if (isLoggedIn) {
                         bookings.value = bookingRepository.getLocalBookings()
                         isLoading = true
                         bookings.value = bookingRepository.getBookings()
@@ -64,8 +96,37 @@ class MainActivity : ComponentActivity() {
                 var isBookingsScreenInitialized by remember { mutableStateOf(true) }
                 var isSearchInitialized by remember { mutableStateOf(true) }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
+                if (!isLoggedIn) {
+                    LoginScreen(onLoginSuccess = onLoginSuccess)
+                } else if (isStaffMode) {
+                    StaffDashboardScreen(
+                        bookings = displayedBookings,
+                        bookingRepository = bookingRepository,
+                        onSaveBooking = { newBooking ->
+                            coroutineScope.launch {
+                                bookingRepository.saveBooking(newBooking)
+                                bookings.value = bookingRepository.getBookings()
+                            }
+                        },
+                        onDeleteBooking = { id ->
+                            coroutineScope.launch {
+                                bookingRepository.deleteBooking(id)
+                                bookings.value = bookingRepository.getBookings()
+                            }
+                        },
+                        onRefresh = {
+                            coroutineScope.launch {
+                                isLoading = true
+                                bookings.value = bookingRepository.getBookings()
+                                isLoading = false
+                            }
+                        },
+                        onLogout = onLogout,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
                     bottomBar = {
                         NavigationBar {
                             NavigationBarItem(
@@ -145,7 +206,7 @@ class MainActivity : ComponentActivity() {
                             modifier = if (currentTab == 0) Modifier.fillMaxSize() else Modifier.size(0.dp)
                         ) {
                             DashboardScreen(
-                                bookings = bookings.value,
+                                bookings = displayedBookings,
                                 onEditBooking = { booking ->
                                     bookingToEdit = booking
                                 },
@@ -171,7 +232,8 @@ class MainActivity : ComponentActivity() {
                                 modifier = if (currentTab == 1) Modifier.fillMaxSize() else Modifier.size(0.dp)
                             ) {
                                 AddBookingScreen(
-                                    bookings = bookings.value,
+                                    bookings = displayedBookings,
+                                    bookingRepository = bookingRepository,
                                     onAddBooking = { newBooking ->
                                         coroutineScope.launch {
                                             bookingRepository.saveBooking(newBooking)
@@ -194,7 +256,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = if (currentTab == 2) Modifier.fillMaxSize() else Modifier.size(0.dp)
                             ) {
                                 BookingsScreen(
-                                    bookings = bookings.value,
+                                    bookings = displayedBookings,
                                     onSaveBooking = { newBooking ->
                                         coroutineScope.launch {
                                             bookingRepository.saveBooking(newBooking)
@@ -217,7 +279,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = if (currentTab == 3) Modifier.fillMaxSize() else Modifier.size(0.dp)
                             ) {
                                 SearchScreen(
-                                    bookings = bookings.value,
+                                    bookings = displayedBookings,
                                     onEditBooking = { booking ->
                                         bookingToEdit = booking
                                     },
@@ -237,9 +299,12 @@ class MainActivity : ComponentActivity() {
                         ) {
                             SettingsScreen(
                                 bookingRepository = bookingRepository,
+                                isStaffMode = isStaffMode,
+                                onRoleChanged = onRoleChanged,
                                 onRestored = { restoredBookings ->
                                     bookings.value = restoredBookings
                                 },
+                                onLogout = onLogout,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -249,9 +314,10 @@ class MainActivity : ComponentActivity() {
                                 QuickBookDialog(
                                     date = bookingToEdit!!.checkInDate,
                                     roomNumber = bookingToEdit!!.items.firstOrNull()?.roomNumber ?: "",
-                                    bookings = bookings.value,
+                                    bookings = displayedBookings,
                                     bookingToEdit = bookingToEdit,
                                     isDormMode = bookingToEdit!!.items.any { it.category == "Dorm" || it.category == "Dorm Bed" },
+                                    bookingRepository = bookingRepository,
                                     onDismiss = { bookingToEdit = null },
                                     onConfirm = { updatedBooking ->
                                         coroutineScope.launch {
@@ -305,6 +371,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
                 }
             }
         }
