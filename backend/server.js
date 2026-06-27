@@ -111,6 +111,20 @@ const PaymentDetailSchema = new mongoose.Schema({
   timestamp: { type: Number, required: true }
 });
 
+const GuestIdImageSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  url: { type: String, required: true },
+  fileId: { type: String, default: "" },
+  label: { type: String, default: "" }
+});
+
+const GuestIdCardSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  idType: { type: String, required: true },
+  guestName: { type: String, default: "" },
+  images: [GuestIdImageSchema]
+});
+
 const BookingSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   checkInDate: { type: String, required: true },
@@ -133,6 +147,7 @@ const BookingSchema = new mongoose.Schema({
   idDocumentType: { type: String, default: "" },
   idDocumentUrl: { type: String, default: "" },
   idDocumentFileId: { type: String, default: "" },
+  guestIds: { type: [GuestIdCardSchema], default: [] },
   timestamp: { type: Number, required: true }
 });
 
@@ -205,8 +220,14 @@ app.post('/api/bookings', async (req, res) => {
 app.delete('/api/bookings/:id', async (req, res) => {
   try {
     const bookingId = req.params.id;
+    const deleteIds = req.query.deleteIds === 'true';
+    
+    let bookingToDelete = null;
 
     if (isUsingMongoDB) {
+      if (deleteIds) {
+        bookingToDelete = await Booking.findOne({ id: bookingId });
+      }
       const result = await Booking.findOneAndDelete({ id: bookingId });
       if (!result) {
         return res.status(404).json({ error: 'Booking not found' });
@@ -214,12 +235,38 @@ app.delete('/api/bookings/:id', async (req, res) => {
       res.json({ message: 'Booking deleted successfully', id: bookingId });
     } else {
       const bookings = readLocalBookings();
-      const filtered = bookings.filter(b => b.id !== bookingId);
-      if (bookings.length === filtered.length) {
+      const index = bookings.findIndex(b => b.id === bookingId);
+      if (index === -1) {
         return res.status(404).json({ error: 'Booking not found' });
       }
+      bookingToDelete = bookings[index];
+      const filtered = bookings.filter(b => b.id !== bookingId);
       writeLocalBookings(filtered);
       res.json({ message: 'Booking deleted successfully', id: bookingId });
+    }
+
+    // Clean up associated Guest ID files if requested
+    if (deleteIds && bookingToDelete && bookingToDelete.guestIds) {
+      for (const card of bookingToDelete.guestIds) {
+        for (const img of card.images) {
+          if (img.fileId) {
+            deleteFileFromGoogleDrive(img.fileId).catch(err => console.error("Error cleaning up Drive file:", err));
+          }
+          if (img.url && img.url.includes('/uploads/')) {
+            const urlParts = img.url.split('/uploads/');
+            if (urlParts.length > 1) {
+              const localPath = path.join(uploadsDir, urlParts[1]);
+              if (fs.existsSync(localPath)) {
+                try {
+                  fs.unlinkSync(localPath);
+                } catch (e) {
+                  console.error("Error cleaning up local file:", e);
+                }
+              }
+            }
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('Error deleting booking:', error);
@@ -349,7 +396,36 @@ app.delete('/api/backups/:id', async (req, res) => {
   }
 });
 
-async function uploadToGoogleDrive(buffer, fileName, mimeType) {
+async function getOrCreateFolder(drive, folderName, parentId) {
+  const qParts = [
+    `name = '${folderName}'`,
+    `mimeType = 'application/vnd.google-apps.folder'`,
+    `trashed = false`
+  ];
+  if (parentId) {
+    qParts.push(`'${parentId}' in parents`);
+  }
+  const response = await drive.files.list({
+    q: qParts.join(' and '),
+    fields: 'files(id)'
+  });
+  if (response.data.files && response.data.files.length > 0) {
+    return response.data.files[0].id;
+  }
+  
+  const fileMetadata = {
+    name: folderName,
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: parentId ? [parentId] : []
+  };
+  const folder = await drive.files.create({
+    resource: fileMetadata,
+    fields: 'id'
+  });
+  return folder.data.id;
+}
+
+async function uploadToGoogleDrive(buffer, fileName, mimeType, folders = []) {
   let auth = null;
   
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
@@ -386,6 +462,12 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType) {
   try {
     const drive = google.drive({ version: 'v3', auth });
     
+    // Resolve target folder hierarchy
+    let currentParentId = process.env.GOOGLE_DRIVE_FOLDER_ID || null;
+    for (const folderName of folders) {
+      currentParentId = await getOrCreateFolder(drive, folderName, currentParentId);
+    }
+    
     const { Readable } = require('stream');
     const stream = new Readable();
     stream.push(buffer);
@@ -393,7 +475,7 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType) {
     
     const fileMetadata = {
       name: fileName,
-      parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : []
+      parents: currentParentId ? [currentParentId] : []
     };
     const media = {
       mimeType: mimeType,
@@ -501,6 +583,241 @@ app.post('/api/bookings/:id/upload-id', async (req, res) => {
     res.json(updatedBooking);
   } catch (error) {
     console.error('Error uploading ID document:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+async function deleteFileFromGoogleDrive(fileId) {
+  let auth = null;
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      'http://localhost'
+    );
+    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    auth = oauth2Client;
+  } else if (process.env.GOOGLE_CREDENTIALS) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+      auth = new google.auth.JWT(
+        credentials.client_email,
+        null,
+        credentials.private_key,
+        ['https://www.googleapis.com/auth/drive']
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  if (!auth) return;
+  try {
+    const drive = google.drive({ version: 'v3', auth });
+    await drive.files.delete({ fileId });
+    console.log(`Successfully deleted file from Google Drive. File ID: ${fileId}`);
+  } catch (err) {
+    console.error(`Error deleting Google Drive file ${fileId}:`, err.message);
+  }
+}
+
+// New upload endpoint for multiple guest IDs
+app.post('/api/bookings/:id/guest-ids/upload', async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const { cardId, imageId, idType, guestName, imageContentBase64, label, index } = req.body;
+    
+    if (!cardId || !imageId || !idType || !imageContentBase64) {
+      return res.status(400).json({ error: 'Missing required fields (cardId, imageId, idType, imageContentBase64)' });
+    }
+    
+    // Parse MIME type and extract base64 raw string
+    let base64Data = imageContentBase64;
+    let mimeType = 'image/jpeg';
+    if (base64Data.startsWith('data:')) {
+      const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        mimeType = matches[1];
+        base64Data = matches[2];
+      }
+    }
+    
+    const buffer = Buffer.from(base64Data, 'base64');
+    const extension = mimeType.split('/')[1] || 'jpg';
+    
+    // Structured folder names (Year/Month/Date)
+    const now = new Date();
+    const yyyy = now.getFullYear().toString();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const folders = [yyyy, mm, dd];
+    
+    // File name: date_bookingId_index.ext
+    const formattedFileName = `${dateStr}_${bookingId}_${index}.${extension}`;
+    
+    // 1. Try uploading to Google Drive inside the structured folders
+    const driveResult = await uploadToGoogleDrive(buffer, formattedFileName, mimeType, folders);
+    let documentUrl = driveResult ? driveResult.url : null;
+    let documentFileId = driveResult ? driveResult.fileId : "";
+    
+    // 2. Fallback to local storage (structured uploads/YYYY/MM/DD/)
+    if (!documentUrl) {
+      console.log("Falling back to local structured static storage.");
+      const relativePath = path.join(yyyy, mm, dd);
+      const targetDir = path.join(uploadsDir, relativePath);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      const localPath = path.join(targetDir, formattedFileName);
+      fs.writeFileSync(localPath, buffer);
+      
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.get('host');
+      documentUrl = `${protocol}://${host}/uploads/${yyyy}/${mm}/${dd}/${formattedFileName}`;
+    }
+    
+    console.log(`Document URL generated: ${documentUrl}, File ID: ${documentFileId}`);
+    
+    // 3. Update target booking
+    let updatedBooking = null;
+    if (isUsingMongoDB) {
+      const booking = await Booking.findOne({ id: bookingId });
+      if (!booking) {
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+      
+      let card = booking.guestIds.find(c => c.id === cardId);
+      if (!card) {
+        card = { id: cardId, idType, guestName: guestName || "", images: [] };
+        booking.guestIds.push(card);
+        card = booking.guestIds[booking.guestIds.length - 1];
+      }
+      
+      let img = card.images.find(i => i.id === imageId);
+      if (img) {
+        img.url = documentUrl;
+        img.fileId = documentFileId;
+        img.label = label || "";
+      } else {
+        card.images.push({ id: imageId, url: documentUrl, fileId: documentFileId, label: label || "" });
+      }
+      
+      updatedBooking = await booking.save();
+    } else {
+      const bookings = readLocalBookings();
+      const bIndex = bookings.findIndex(b => b.id === bookingId);
+      if (bIndex !== -1) {
+        let booking = bookings[bIndex];
+        if (!booking.guestIds) {
+          booking.guestIds = [];
+        }
+        let card = booking.guestIds.find(c => c.id === cardId);
+        if (!card) {
+          card = { id: cardId, idType, guestName: guestName || "", images: [] };
+          booking.guestIds.push(card);
+        }
+        let img = card.images.find(i => i.id === imageId);
+        if (img) {
+          img.url = documentUrl;
+          img.fileId = documentFileId;
+          img.label = label || "";
+        } else {
+          card.images.push({ id: imageId, url: documentUrl, fileId: documentFileId, label: label || "" });
+        }
+        writeLocalBookings(bookings);
+        updatedBooking = booking;
+      }
+    }
+    
+    if (!updatedBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    res.json(updatedBooking);
+  } catch (error) {
+    console.error('Error uploading guest ID image:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Delete specific ID image route
+app.delete('/api/bookings/:id/guest-ids/:cardId/images/:imageId', async (req, res) => {
+  try {
+    const { id: bookingId, cardId, imageId } = req.params;
+    
+    let fileIdToDelete = null;
+    let localPathToDelete = null;
+    let updatedBooking = null;
+    
+    if (isUsingMongoDB) {
+      const booking = await Booking.findOne({ id: bookingId });
+      if (!booking) {
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+      
+      const card = booking.guestIds.find(c => c.id === cardId);
+      if (card) {
+        const imgIndex = card.images.findIndex(i => i.id === imageId);
+        if (imgIndex !== -1) {
+          const img = card.images[imgIndex];
+          fileIdToDelete = img.fileId;
+          if (img.url && img.url.includes('/uploads/')) {
+            const urlParts = img.url.split('/uploads/');
+            if (urlParts.length > 1) {
+              localPathToDelete = path.join(uploadsDir, urlParts[1]);
+            }
+          }
+          card.images.splice(imgIndex, 1);
+        }
+      }
+      updatedBooking = await booking.save();
+    } else {
+      const bookings = readLocalBookings();
+      const index = bookings.findIndex(b => b.id === bookingId);
+      if (index !== -1) {
+        const booking = bookings[index];
+        if (booking.guestIds) {
+          const card = booking.guestIds.find(c => c.id === cardId);
+          if (card) {
+            const imgIndex = card.images.findIndex(i => i.id === imageId);
+            if (imgIndex !== -1) {
+              const img = card.images[imgIndex];
+              fileIdToDelete = img.fileId;
+              if (img.url && img.url.includes('/uploads/')) {
+                const urlParts = img.url.split('/uploads/');
+                if (urlParts.length > 1) {
+                  localPathToDelete = path.join(uploadsDir, urlParts[1]);
+                }
+              }
+              card.images.splice(imgIndex, 1);
+            }
+          }
+        }
+        writeLocalBookings(bookings);
+        updatedBooking = booking;
+      }
+    }
+    
+    if (!updatedBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    // Background delete files
+    if (fileIdToDelete) {
+      deleteFileFromGoogleDrive(fileIdToDelete).catch(err => console.error("Error deleting Drive file:", err));
+    }
+    if (localPathToDelete && fs.existsSync(localPathToDelete)) {
+      try {
+        fs.unlinkSync(localPathToDelete);
+        console.log(`Deleted local file: ${localPathToDelete}`);
+      } catch (err) {
+        console.error("Error deleting local file:", err);
+      }
+    }
+    
+    res.json(updatedBooking);
+  } catch (error) {
+    console.error('Error deleting ID image:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

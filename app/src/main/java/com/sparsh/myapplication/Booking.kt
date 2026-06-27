@@ -188,8 +188,78 @@ data class PaymentDetail(
     }
 }
 
-data class Booking(
+data class GuestIdImage(
     val id: String = UUID.randomUUID().toString(),
+    val url: String,
+    val fileId: String = "",
+    val label: String = ""
+) {
+    fun toJsonObject(): JSONObject {
+        val json = JSONObject()
+        json.put("id", id)
+        json.put("url", url)
+        json.put("fileId", fileId)
+        json.put("label", label)
+        return json
+    }
+
+    companion object {
+        fun fromJsonObject(json: JSONObject): GuestIdImage {
+            return GuestIdImage(
+                id = json.optString("id", UUID.randomUUID().toString()),
+                url = json.getString("url"),
+                fileId = json.optString("fileId", ""),
+                label = json.optString("label", "")
+            )
+        }
+    }
+}
+
+data class GuestIdCard(
+    val id: String = UUID.randomUUID().toString(),
+    val idType: String,
+    val guestName: String = "",
+    val images: List<GuestIdImage> = emptyList()
+) {
+    fun toJsonObject(): JSONObject {
+        val json = JSONObject()
+        json.put("id", id)
+        json.put("idType", idType)
+        json.put("guestName", guestName)
+        val imagesArray = JSONArray()
+        images.forEach { imagesArray.put(it.toJsonObject()) }
+        json.put("images", imagesArray)
+        return json
+    }
+
+    companion object {
+        fun fromJsonObject(json: JSONObject): GuestIdCard {
+            val imgList = mutableListOf<GuestIdImage>()
+            if (json.has("images")) {
+                val array = json.getJSONArray("images")
+                for (i in 0 until array.length()) {
+                    imgList.add(GuestIdImage.fromJsonObject(array.getJSONObject(i)))
+                }
+            }
+            return GuestIdCard(
+                id = json.optString("id", UUID.randomUUID().toString()),
+                idType = json.getString("idType"),
+                guestName = json.optString("guestName", ""),
+                images = imgList
+            )
+        }
+    }
+}
+
+fun generateBookingId(): String {
+    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    val randomPart = (1..5).map { chars.random() }.joinToString("")
+    val dateStr = java.text.SimpleDateFormat("yyMMdd", java.util.Locale.US).format(java.util.Date())
+    return "BK-$dateStr-$randomPart"
+}
+
+data class Booking(
+    val id: String = generateBookingId(),
     val checkInDate: String,
     val platform: String,
     val guestName: String,
@@ -208,7 +278,8 @@ data class Booking(
     val extraPrice: Double = 0.0,
     val idDocumentType: String = "",
     val idDocumentUrl: String = "",
-    val idDocumentFileId: String = ""
+    val idDocumentFileId: String = "",
+    val guestIds: List<GuestIdCard> = emptyList()
 ) {
     fun spansDate(targetDate: String): Boolean {
         return try {
@@ -307,6 +378,11 @@ data class Booking(
         json.put("idDocumentType", idDocumentType)
         json.put("idDocumentUrl", idDocumentUrl)
         json.put("idDocumentFileId", idDocumentFileId)
+        
+        val guestIdsArray = JSONArray()
+        guestIds.forEach { guestIdsArray.put(it.toJsonObject()) }
+        json.put("guestIds", guestIdsArray)
+        
         return json
     }
 
@@ -375,6 +451,26 @@ data class Booking(
             val discountVal = json.optDouble("discount", 0.0)
             val extraPriceVal = json.optDouble("extraPrice", 0.0)
 
+            val guestIdsList = mutableListOf<GuestIdCard>()
+            if (json.has("guestIds")) {
+                val array = json.getJSONArray("guestIds")
+                for (i in 0 until array.length()) {
+                    guestIdsList.add(GuestIdCard.fromJsonObject(array.getJSONObject(i)))
+                }
+            } else {
+                val oldUrl = json.optString("idDocumentUrl", "")
+                val oldType = json.optString("idDocumentType", "")
+                val oldFileId = json.optString("idDocumentFileId", "")
+                if (oldUrl.isNotBlank() || oldType.isNotBlank()) {
+                    guestIdsList.add(
+                        GuestIdCard(
+                            idType = if (oldType.isNotBlank()) oldType else "Aadhaar Card",
+                            images = listOf(GuestIdImage(url = oldUrl, fileId = oldFileId, label = "Document"))
+                        )
+                    )
+                }
+            }
+
             return Booking(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 checkInDate = json.getString("checkInDate"),
@@ -395,7 +491,8 @@ data class Booking(
                 extraPrice = extraPriceVal,
                 idDocumentType = json.optString("idDocumentType", ""),
                 idDocumentUrl = json.optString("idDocumentUrl", ""),
-                idDocumentFileId = json.optString("idDocumentFileId", "")
+                idDocumentFileId = json.optString("idDocumentFileId", ""),
+                guestIds = guestIdsList
             )
         }
     }
