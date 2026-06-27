@@ -350,18 +350,40 @@ app.delete('/api/backups/:id', async (req, res) => {
 });
 
 async function uploadToGoogleDrive(buffer, fileName, mimeType) {
-  if (!process.env.GOOGLE_CREDENTIALS) {
-    console.warn("GOOGLE_CREDENTIALS env variable is not set. Google Drive upload is skipped.");
+  let auth = null;
+  
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      'http://localhost'
+    );
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+    });
+    auth = oauth2Client;
+    console.log("Using OAuth2 User Authentication for Google Drive.");
+  } else if (process.env.GOOGLE_CREDENTIALS) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+      auth = new google.auth.JWT(
+        credentials.client_email,
+        null,
+        credentials.private_key,
+        ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
+      );
+      console.log("Using Service Account Authentication for Google Drive.");
+    } catch (e) {
+      console.error("Failed to parse GOOGLE_CREDENTIALS:", e);
+    }
+  }
+
+  if (!auth) {
+    console.warn("Google Drive credentials (OAuth2 or Service Account) are not set. Google Drive upload is skipped.");
     return null;
   }
+
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.JWT(
-      credentials.client_email,
-      null,
-      credentials.private_key,
-      ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
-    );
     const drive = google.drive({ version: 'v3', auth });
     
     const { Readable } = require('stream');
