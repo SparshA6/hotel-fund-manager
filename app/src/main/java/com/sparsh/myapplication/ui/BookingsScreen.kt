@@ -1905,7 +1905,8 @@ fun AddUnassignedBookingDialog(
                         checkInDate
                     }
                     val newBooking = Booking(
-                        id = bookingToEdit?.id ?: UUID.randomUUID().toString(),
+                        id = bookingToEdit?.id ?: com.sparsh.myapplication.generateBookingId(),
+                        guestIds = bookingToEdit?.guestIds ?: emptyList(),
                         checkInDate = finalCheckInDate,
                         platform = platform,
                         guestName = guestName.trim(),
