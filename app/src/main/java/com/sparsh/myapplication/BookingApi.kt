@@ -9,6 +9,16 @@ data class UploadIdRequest(
     val imageName: String
 )
 
+data class UploadGuestIdRequest(
+    val cardId: String,
+    val imageId: String,
+    val idType: String,
+    val guestName: String,
+    val imageContentBase64: String,
+    val label: String,
+    val index: Int
+)
+
 interface BookingApi {
     @GET("api/bookings")
     suspend fun getBookings(): List<Booking>
@@ -17,12 +27,28 @@ interface BookingApi {
     suspend fun saveBooking(@Body booking: Booking): Booking
 
     @DELETE("api/bookings/{id}")
-    suspend fun deleteBooking(@Path("id") id: String): Response<Unit>
+    suspend fun deleteBooking(
+        @Path("id") id: String,
+        @Query("deleteIds") deleteIds: Boolean
+    ): Response<Unit>
 
     @POST("api/bookings/{id}/upload-id")
     suspend fun uploadIdDocument(
         @Path("id") id: String,
         @Body body: UploadIdRequest
+    ): Booking
+
+    @POST("api/bookings/{id}/guest-ids/upload")
+    suspend fun uploadGuestId(
+        @Path("id") id: String,
+        @Body body: UploadGuestIdRequest
+    ): Booking
+
+    @DELETE("api/bookings/{id}/guest-ids/{cardId}/images/{imageId}")
+    suspend fun deleteGuestIdImage(
+        @Path("id") id: String,
+        @Path("cardId") cardId: String,
+        @Path("imageId") imageId: String
     ): Booking
 
     @GET("api/backups")

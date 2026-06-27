@@ -69,7 +69,7 @@ data class BookingAllocationInput(
 fun BookingsScreen(
     bookings: List<Booking>,
     onSaveBooking: (Booking) -> Unit,
-    onDeleteBooking: (String) -> Unit,
+    onDeleteBooking: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val formBackground = Brush.verticalGradient(
@@ -83,6 +83,7 @@ fun BookingsScreen(
     var selectedBookingForAssignment by remember { mutableStateOf<Booking?>(null) }
     var selectedBookingForPayment by remember { mutableStateOf<Booking?>(null) }
     var selectedBookingForEdit by remember { mutableStateOf<Booking?>(null) }
+    var bookingToDelete by remember { mutableStateOf<Booking?>(null) }
 
     val unassignedBookings = remember(bookings) {
         bookings.filter { !it.isAssigned }.sortedBy { it.checkInDate }
@@ -158,7 +159,7 @@ fun BookingsScreen(
                             booking = booking,
                             onAssignClick = { selectedBookingForAssignment = booking },
                             onAddPaymentClick = { selectedBookingForPayment = booking },
-                            onDeleteClick = { onDeleteBooking(booking.id) },
+                            onDeleteClick = { bookingToDelete = booking },
                             onClick = { selectedBookingForEdit = booking }
                         )
                     }
@@ -212,6 +213,64 @@ fun BookingsScreen(
             onConfirm = { updatedBooking ->
                 onSaveBooking(updatedBooking)
                 selectedBookingForPayment = null
+            }
+        )
+    }
+
+    if (bookingToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { bookingToDelete = null },
+            title = { Text("Delete Booking", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Are you sure you want to delete the booking for ${if (bookingToDelete!!.guestName.isBlank()) "Direct Guest" else bookingToDelete!!.guestName}?")
+            },
+            confirmButton = {
+                val hasIds = bookingToDelete!!.guestIds.isNotEmpty()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    if (hasIds) {
+                        Button(
+                            onClick = {
+                                onDeleteBooking(bookingToDelete!!.id, true)
+                                bookingToDelete = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Delete Booking & IDs", fontSize = 11.sp, textAlign = TextAlign.Center)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                onDeleteBooking(bookingToDelete!!.id, false)
+                                bookingToDelete = null
+                            },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Delete Booking Only", fontSize = 11.sp, textAlign = TextAlign.Center)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                onDeleteBooking(bookingToDelete!!.id, false)
+                                bookingToDelete = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Delete")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { bookingToDelete = null }) {
+                    Text("Cancel")
+                }
             }
         )
     }

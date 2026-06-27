@@ -20,9 +20,9 @@ class BookingRepository(context: Context) {
         .addInterceptor { chain ->
             val request = chain.request()
             val buffer = okio.Buffer()
-            request.body()?.writeTo(buffer)
+            request.body?.writeTo(buffer)
             val bodyStr = buffer.readUtf8()
-            Log.e("BookingRepository", "API REQUEST: ${request.method()} ${request.url()} - Body: $bodyStr")
+            Log.e("BookingRepository", "API REQUEST: ${request.method} ${request.url} - Body: $bodyStr")
             chain.proceed(request)
         }
         .build()
@@ -82,15 +82,15 @@ class BookingRepository(context: Context) {
     /**
      * Deletes a booking. Updates local cache immediately, then syncs deletion to cloud.
      */
-    suspend fun deleteBooking(bookingId: String) = withContext(Dispatchers.IO) {
+    suspend fun deleteBooking(bookingId: String, deleteIds: Boolean = false) = withContext(Dispatchers.IO) {
         // Delete from local cache first
         val localBookings = getLocalBookings().toMutableList()
         localBookings.removeAll { it.id == bookingId }
         saveAllLocalBookings(localBookings)
 
         try {
-            Log.d("BookingRepository", "Deleting booking $bookingId from cloud...")
-            val response = api.deleteBooking(bookingId)
+            Log.d("BookingRepository", "Deleting booking $bookingId from cloud (deleteIds=$deleteIds)...")
+            val response = api.deleteBooking(bookingId, deleteIds)
             if (response.isSuccessful) {
                 Log.d("BookingRepository", "Deleted booking from cloud successfully.")
             } else {
@@ -98,6 +98,54 @@ class BookingRepository(context: Context) {
             }
         } catch (e: Exception) {
             Log.e("BookingRepository", "Failed to delete booking from cloud: ${e.message}. Deleted locally.")
+        }
+    }
+
+    suspend fun uploadGuestId(
+        bookingId: String,
+        cardId: String,
+        imageId: String,
+        idType: String,
+        guestName: String,
+        imageBase64: String,
+        label: String,
+        index: Int
+    ): Booking? = withContext(Dispatchers.IO) {
+        try {
+            Log.d("BookingRepository", "Uploading guest ID for booking $bookingId, card $cardId...")
+            val req = UploadGuestIdRequest(cardId, imageId, idType, guestName, imageBase64, label, index)
+            val updatedBooking = api.uploadGuestId(bookingId, req)
+            Log.d("BookingRepository", "Uploaded guest ID successfully. Updating local cache.")
+            // Update local cache
+            val localBookings = getLocalBookings().toMutableList()
+            localBookings.removeAll { it.id == updatedBooking.id }
+            localBookings.add(updatedBooking)
+            saveAllLocalBookings(localBookings)
+            updatedBooking
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to upload guest ID: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun deleteGuestIdImage(
+        bookingId: String,
+        cardId: String,
+        imageId: String
+    ): Booking? = withContext(Dispatchers.IO) {
+        try {
+            Log.d("BookingRepository", "Deleting guest ID image $imageId for booking $bookingId...")
+            val updatedBooking = api.deleteGuestIdImage(bookingId, cardId, imageId)
+            Log.d("BookingRepository", "Deleted guest ID image successfully. Updating local cache.")
+            // Update local cache
+            val localBookings = getLocalBookings().toMutableList()
+            localBookings.removeAll { it.id == updatedBooking.id }
+            localBookings.add(updatedBooking)
+            saveAllLocalBookings(localBookings)
+            updatedBooking
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to delete guest ID image: ${e.message}")
+            null
         }
     }
 

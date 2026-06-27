@@ -50,7 +50,7 @@ enum class ReportPeriod {
 fun DashboardScreen(
     bookings: List<Booking>,
     onEditBooking: (Booking) -> Unit,
-    onDeleteBooking: (String) -> Unit,
+    onDeleteBooking: (String, Boolean) -> Unit,
     onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -608,7 +608,7 @@ fun DashboardScreen(
                             booking = booking,
                             currencyFormatter = currencyFormatter,
                             onEdit = { onEditBooking(booking) },
-                            onDelete = { onDeleteBooking(booking.id) },
+                            onDelete = { deleteIds -> onDeleteBooking(booking.id, deleteIds) },
                             onAssignClick = if (!booking.isAssigned) {
                                 { selectedBookingForAssignment = booking }
                             } else null

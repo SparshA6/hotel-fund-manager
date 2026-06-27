@@ -1,5 +1,6 @@
 package com.sparsh.myapplication.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +22,7 @@ fun BookingItem(
     booking: Booking,
     currencyFormatter: NumberFormat,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onAssignClick: (() -> Unit)? = null
 ) {
@@ -40,14 +41,46 @@ fun BookingItem(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        onDelete()
-                        showDeleteConfirm = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                val hasIds = booking.guestIds.isNotEmpty()
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
-                    Text("Delete")
+                    if (hasIds) {
+                        Button(
+                            onClick = {
+                                onDelete(true)
+                                showDeleteConfirm = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Delete Booking & IDs", fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                onDelete(false)
+                                showDeleteConfirm = false
+                            },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Delete Booking Only", fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                onDelete(false)
+                                showDeleteConfirm = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Delete")
+                        }
+                    }
                 }
             },
             dismissButton = {

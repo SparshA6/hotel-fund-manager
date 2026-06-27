@@ -26,7 +26,7 @@ import java.util.Locale
 fun SearchScreen(
     bookings: List<Booking>,
     onEditBooking: (Booking) -> Unit,
-    onDeleteBooking: (String) -> Unit,
+    onDeleteBooking: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -154,7 +154,7 @@ fun SearchScreen(
                         booking = booking,
                         currencyFormatter = currencyFormatter,
                         onEdit = { onEditBooking(booking) },
-                        onDelete = { onDeleteBooking(booking.id) }
+                        onDelete = { deleteIds -> onDeleteBooking(booking.id, deleteIds) }
                     )
                 }
             }

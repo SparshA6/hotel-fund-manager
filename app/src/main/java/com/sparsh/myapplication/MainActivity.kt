@@ -108,9 +108,9 @@ class MainActivity : ComponentActivity() {
                                 bookings.value = bookingRepository.getBookings()
                             }
                         },
-                        onDeleteBooking = { id ->
+                        onDeleteBooking = { id, deleteIds ->
                             coroutineScope.launch {
-                                bookingRepository.deleteBooking(id)
+                                bookingRepository.deleteBooking(id, deleteIds)
                                 bookings.value = bookingRepository.getBookings()
                             }
                         },
@@ -210,9 +210,9 @@ class MainActivity : ComponentActivity() {
                                 onEditBooking = { booking ->
                                     bookingToEdit = booking
                                 },
-                                onDeleteBooking = { id ->
+                                onDeleteBooking = { id, deleteIds ->
                                     coroutineScope.launch {
-                                        bookingRepository.deleteBooking(id)
+                                        bookingRepository.deleteBooking(id, deleteIds)
                                         bookings.value = bookingRepository.getBookings()
                                     }
                                 },
@@ -240,9 +240,9 @@ class MainActivity : ComponentActivity() {
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                     },
-                                    onDeleteBooking = { id ->
+                                    onDeleteBooking = { id, deleteIds ->
                                         coroutineScope.launch {
-                                            bookingRepository.deleteBooking(id)
+                                            bookingRepository.deleteBooking(id, deleteIds)
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                     },
@@ -263,9 +263,9 @@ class MainActivity : ComponentActivity() {
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                     },
-                                    onDeleteBooking = { id ->
+                                    onDeleteBooking = { id, deleteIds ->
                                         coroutineScope.launch {
-                                            bookingRepository.deleteBooking(id)
+                                            bookingRepository.deleteBooking(id, deleteIds)
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                     },
@@ -283,9 +283,9 @@ class MainActivity : ComponentActivity() {
                                     onEditBooking = { booking ->
                                         bookingToEdit = booking
                                     },
-                                    onDeleteBooking = { id ->
+                                    onDeleteBooking = { id, deleteIds ->
                                         coroutineScope.launch {
-                                            bookingRepository.deleteBooking(id)
+                                            bookingRepository.deleteBooking(id, deleteIds)
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                     },
@@ -333,9 +333,9 @@ class MainActivity : ComponentActivity() {
                                         }
                                         bookingToEdit = updatedBooking
                                     },
-                                    onDelete = { id ->
+                                    onDelete = { id, deleteIds ->
                                         coroutineScope.launch {
-                                            bookingRepository.deleteBooking(id)
+                                            bookingRepository.deleteBooking(id, deleteIds)
                                             bookings.value = bookingRepository.getBookings()
                                         }
                                         bookingToEdit = null

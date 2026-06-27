@@ -32,7 +32,7 @@ fun StaffDashboardScreen(
     bookings: List<Booking>,
     bookingRepository: BookingRepository,
     onSaveBooking: (Booking) -> Unit,
-    onDeleteBooking: (String) -> Unit,
+    onDeleteBooking: (String, Boolean) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
@@ -458,8 +458,8 @@ fun StaffDashboardScreen(
                 onSaveBooking(updatedBooking)
                 bookingToEditInDialog = null
             },
-            onDelete = { id ->
-                onDeleteBooking(id)
+            onDelete = { id, deleteIds ->
+                onDeleteBooking(id, deleteIds)
                 bookingToEditInDialog = null
             },
             onSaveWithoutDismiss = { updatedBooking ->
