@@ -132,6 +132,7 @@ const BookingSchema = new mongoose.Schema({
   extraPrice: { type: Number, default: 0.0 },
   idDocumentType: { type: String, default: "" },
   idDocumentUrl: { type: String, default: "" },
+  idDocumentFileId: { type: String, default: "" },
   timestamp: { type: Number, required: true }
 });
 
@@ -399,7 +400,10 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType) {
       console.warn("Could not share file publicly:", permError.message);
     }
     
-    return file.data.webViewLink || file.data.webContentLink;
+    return {
+      url: file.data.webViewLink || file.data.webContentLink,
+      fileId: file.data.id
+    };
   } catch (error) {
     console.error("Google Drive upload failed:", error);
     return null;
@@ -431,7 +435,9 @@ app.post('/api/bookings/:id/upload-id', async (req, res) => {
     const cleanFileName = `id_${bookingId}_${Date.now()}.${extension}`;
     
     // 1. Try uploading to Google Drive
-    let documentUrl = await uploadToGoogleDrive(buffer, cleanFileName, mimeType);
+    const driveResult = await uploadToGoogleDrive(buffer, cleanFileName, mimeType);
+    let documentUrl = driveResult ? driveResult.url : null;
+    let documentFileId = driveResult ? driveResult.fileId : "";
     
     // 2. If Drive upload failed/skipped, save locally as fallback
     if (!documentUrl) {
@@ -444,14 +450,14 @@ app.post('/api/bookings/:id/upload-id', async (req, res) => {
       documentUrl = `${protocol}://${host}/uploads/${cleanFileName}`;
     }
     
-    console.log(`Document URL generated: ${documentUrl}`);
+    console.log(`Document URL generated: ${documentUrl}, File ID: ${documentFileId}`);
     
     // 3. Update the booking in Database/JSON file
     let updatedBooking = null;
     if (isUsingMongoDB) {
       updatedBooking = await Booking.findOneAndUpdate(
         { id: bookingId },
-        { idDocumentType, idDocumentUrl: documentUrl },
+        { idDocumentType, idDocumentUrl: documentUrl, idDocumentFileId: documentFileId },
         { new: true }
       );
     } else {
@@ -460,6 +466,7 @@ app.post('/api/bookings/:id/upload-id', async (req, res) => {
       if (index !== -1) {
         bookings[index].idDocumentType = idDocumentType;
         bookings[index].idDocumentUrl = documentUrl;
+        bookings[index].idDocumentFileId = documentFileId;
         writeLocalBookings(bookings);
         updatedBooking = bookings[index];
       }

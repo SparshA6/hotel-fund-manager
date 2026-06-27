@@ -207,7 +207,8 @@ data class Booking(
     val discount: Double = 0.0,
     val extraPrice: Double = 0.0,
     val idDocumentType: String = "",
-    val idDocumentUrl: String = ""
+    val idDocumentUrl: String = "",
+    val idDocumentFileId: String = ""
 ) {
     fun spansDate(targetDate: String): Boolean {
         return try {
@@ -305,6 +306,7 @@ data class Booking(
         json.put("extraPrice", extraPrice)
         json.put("idDocumentType", idDocumentType)
         json.put("idDocumentUrl", idDocumentUrl)
+        json.put("idDocumentFileId", idDocumentFileId)
         return json
     }
 
@@ -392,7 +394,8 @@ data class Booking(
                 discount = discountVal,
                 extraPrice = extraPriceVal,
                 idDocumentType = json.optString("idDocumentType", ""),
-                idDocumentUrl = json.optString("idDocumentUrl", "")
+                idDocumentUrl = json.optString("idDocumentUrl", ""),
+                idDocumentFileId = json.optString("idDocumentFileId", "")
             )
         }
     }
