@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
@@ -3341,6 +3342,8 @@ fun IdDocumentUploadSection(
     var activeUploadImageId by remember { mutableStateOf<String?>(null) }
     var activeUploadLabel by remember { mutableStateOf("") }
     var activeUploadIndex by remember { mutableStateOf(1) }
+    var previewImageUrl by remember { mutableStateOf<String?>(null) }
+    var previewImageTitle by remember { mutableStateOf("") }
     
     // Create uri for temporary file to save camera capture
     val file = remember {
@@ -3588,46 +3591,93 @@ fun IdDocumentUploadSection(
                     
                     slots.forEach { (label, index) ->
                         val img = card.images.find { it.label == label || (label.startsWith("Page") && it.label == label) } ?: card.images.getOrNull(index - 1)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                .padding(8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(label, fontWeight = FontWeight.Medium, fontSize = 12.sp)
-                            
-                            if (img != null) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Uploaded", color = Color(0xFF2E7D32), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    IconButton(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                val updated = bookingRepository.deleteGuestIdImage(booking.id, card.id, img.id)
-                                                if (updated != null) {
-                                                    onBookingUpdated(updated)
-                                                }
-                                            }
-                                        }
+                        if (img != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        previewImageUrl = img.url
+                                        previewImageTitle = "${card.guestName} (${card.idType}) - $label"
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Preview",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = label,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                                        shape = RoundedCornerShape(4.dp)
                                     ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                        Text(
+                                            text = "VIEW PHOTO",
+                                            color = Color(0xFF2E7D32),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
                                     }
                                 }
-                            } else {
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val updated = bookingRepository.deleteGuestIdImage(booking.id, card.id, img.id)
+                                            if (updated != null) {
+                                                onBookingUpdated(updated)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Delete image",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Button(
                                         onClick = {
                                             activeUploadCardId = card.id
                                             activeUploadImageId = java.util.UUID.randomUUID().toString()
                                             activeUploadLabel = label
                                             activeUploadIndex = index
-                                            
+
                                             val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
                                             if (permissionCheck == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                                 cameraLauncher.launch(uri)
@@ -3637,7 +3687,8 @@ fun IdDocumentUploadSection(
                                         },
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                         shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.height(28.dp)
                                     ) {
                                         Text("Camera", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
@@ -3650,7 +3701,8 @@ fun IdDocumentUploadSection(
                                             galleryLauncher.launch("image/*")
                                         },
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        shape = RoundedCornerShape(6.dp)
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(28.dp)
                                     ) {
                                         Text("Gallery", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
@@ -3661,7 +3713,7 @@ fun IdDocumentUploadSection(
                 }
             }
         }
-        
+
         // Add Guest ID Card Creator Form
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -3674,7 +3726,7 @@ fun IdDocumentUploadSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Add New Guest ID", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                
+
                 OutlinedTextField(
                     value = newGuestName,
                     onValueChange = { newGuestName = it },
@@ -3683,7 +3735,7 @@ fun IdDocumentUploadSection(
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp)
                 )
-                
+
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { showNewIdDropdown = true },
@@ -3715,7 +3767,7 @@ fun IdDocumentUploadSection(
                         }
                     }
                 }
-                
+
                 Button(
                     onClick = {
                         if (newGuestName.isBlank()) {
@@ -3746,111 +3798,91 @@ fun IdDocumentUploadSection(
                 }
             }
         }
-        
-        // Automatic Image Loading Panel
-        val allImages = booking.guestIds.flatMap { card ->
-            card.images.map { img -> Pair(card, img) }
+    }
+
+    if (previewImageUrl != null) {
+        val directUrl = if (previewImageUrl!!.contains("drive.google.com/file/d/")) {
+            val parts = previewImageUrl!!.split("/d/")
+            if (parts.size > 1) {
+                val fileId = parts[1].split("/")[0]
+                "https://drive.google.com/uc?export=download&id=$fileId"
+            } else {
+                previewImageUrl!!
+            }
+        } else {
+            previewImageUrl!!
         }
-        
-        if (allImages.isNotEmpty()) {
-            Text(
-                text = "Scanned ID Documents",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            
-            allImages.forEach { (card, img) ->
-                Card(
+
+        AlertDialog(
+            onDismissRequest = { previewImageUrl = null },
+            title = {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Text(
+                        text = previewImageTitle,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { previewImageUrl = null },
+                        modifier = Modifier.size(24.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${card.guestName} (${card.idType}) - ${img.label}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = {
-                                        val browserIntent = android.content.Intent(
-                                            android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(img.url)
-                                        )
-                                        context.startActivity(browserIntent)
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text("Open Link", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                                IconButton(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            val updated = bookingRepository.deleteGuestIdImage(booking.id, card.id, img.id)
-                                            if (updated != null) {
-                                                onBookingUpdated(updated)
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                        
-                        coil.compose.SubcomposeAsyncImage(
-                            model = img.url,
-                            loading = {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                }
-                            },
-                            error = {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(100.dp)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("Photo loading (Tap 'Open Link' to view)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            },
-                            contentDescription = "${card.guestName} ${img.label}",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 400.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
-                                .clickable {
-                                    val browserIntent = android.content.Intent(
-                                        android.content.Intent.ACTION_VIEW,
-                                        android.net.Uri.parse(img.url)
-                                    )
-                                    context.startActivity(browserIntent)
-                                },
-                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
+            },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    coil.compose.SubcomposeAsyncImage(
+                        model = directUrl,
+                        loading = {
+                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        },
+                        error = {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("Could not load image directly", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                Button(
+                                    onClick = {
+                                        val browserIntent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(previewImageUrl)
+                                        )
+                                        context.startActivity(browserIntent)
+                                    }
+                                ) {
+                                    Text("Open in Browser", fontSize = 11.sp)
+                                }
+                            }
+                        },
+                        contentDescription = "ID Preview",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { previewImageUrl = null }) {
+                    Text("Close")
+                }
             }
-        }
+        )
     }
 }

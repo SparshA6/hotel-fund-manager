@@ -505,7 +505,7 @@ async function uploadToGoogleDrive(buffer, fileName, mimeType, folders = []) {
     }
     
     return {
-      url: file.data.webViewLink || file.data.webContentLink,
+      url: `https://drive.google.com/uc?export=download&id=${file.data.id}`,
       fileId: file.data.id
     };
   } catch (error) {
