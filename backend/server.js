@@ -439,7 +439,7 @@ app.post('/api/bookings/:id/upload-id', async (req, res) => {
       const localPath = path.join(uploadsDir, cleanFileName);
       fs.writeFileSync(localPath, buffer);
       
-      const protocol = req.protocol;
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
       const host = req.get('host');
       documentUrl = `${protocol}://${host}/uploads/${cleanFileName}`;
     }
