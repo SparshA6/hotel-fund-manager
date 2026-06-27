@@ -3316,7 +3316,7 @@ fun IdDocumentUploadSection(
             if (bytes != null) {
                 var bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bitmap != null) {
-                    val maxDimension = 600
+                    val maxDimension = 1600
                     val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                     val newWidth = if (ratio > 1) {
                         if (bitmap.width > maxDimension) maxDimension else bitmap.width
@@ -3331,7 +3331,7 @@ fun IdDocumentUploadSection(
                     bitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
                     
                     val outputStream = java.io.ByteArrayOutputStream()
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, outputStream)
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, outputStream)
                     val compressedBytes = outputStream.toByteArray()
                     android.util.Base64.encodeToString(compressedBytes, android.util.Base64.DEFAULT)
                 } else {
