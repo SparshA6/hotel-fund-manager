@@ -17,3 +17,4 @@ local.properties
 # Node backend files
 /backend/node_modules/
 /backend/.env
+/poised-aleph-500718-k9-4379e602e7e1.json
