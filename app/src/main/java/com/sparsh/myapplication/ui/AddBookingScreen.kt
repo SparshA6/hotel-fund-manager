@@ -2475,44 +2475,35 @@ fun QuickBookDialog(
                                                     fontSize = 12.sp,
                                                     style = textStyle
                                                 )
-                                                if (!isPaymentMatched) {
-                                                    IconButton(
-                                                        onClick = {
-                                                            val updatedPayments = dialogPayments.filter { it.id != p.id }
-                                                            dialogPayments = updatedPayments
-                                                            if (bookingToEdit != null) {
-                                                                val finalUpdatedPayments = if (platform != "Direct") {
-                                                                    val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
-                                                                        ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
-                                                                    listOf(portalBase) + updatedPayments
-                                                                } else {
-                                                                    updatedPayments
-                                                                }
-                                                                val updatedBooking = bookingToEdit.copy(
-                                                                    payments = finalUpdatedPayments
-                                                                )
-                                                                if (onSaveWithoutDismiss != null) {
-                                                                    onSaveWithoutDismiss(updatedBooking)
-                                                                } else {
-                                                                    onConfirm(updatedBooking)
-                                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        val updatedPayments = dialogPayments.filter { it.id != p.id }
+                                                        dialogPayments = updatedPayments
+                                                        if (bookingToEdit != null) {
+                                                            val finalUpdatedPayments = if (platform != "Direct") {
+                                                                val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
+                                                                    ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
+                                                                listOf(portalBase) + updatedPayments
+                                                            } else {
+                                                                updatedPayments
                                                             }
-                                                        },
-                                                        modifier = Modifier.size(24.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Delete,
-                                                            contentDescription = "Remove payment",
-                                                            modifier = Modifier.size(16.dp),
-                                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                                        )
-                                                    }
-                                                } else {
+                                                            val updatedBooking = bookingToEdit.copy(
+                                                                payments = finalUpdatedPayments
+                                                            )
+                                                            if (onSaveWithoutDismiss != null) {
+                                                                onSaveWithoutDismiss(updatedBooking)
+                                                            } else {
+                                                                onConfirm(updatedBooking)
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
                                                     Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = "Reconciled & Locked",
-                                                        modifier = Modifier.size(24.dp).padding(4.dp),
-                                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Remove payment",
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                                                     )
                                                 }
                                             }

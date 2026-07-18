@@ -1386,37 +1386,28 @@ fun AddUnassignedBookingDialog(
                                                 fontSize = 12.sp,
                                                 style = textStyle
                                             )
-                                            if (!isPaymentMatched) {
-                                                IconButton(
-                                                    onClick = {
-                                                        val updatedPayments = dialogPayments.filter { it.id != p.id }
-                                                        dialogPayments = updatedPayments
-                                                        if (bookingToEdit != null) {
-                                                            val updatedBooking = bookingToEdit.copy(
-                                                                payments = updatedPayments
-                                                            )
-                                                            if (onSaveWithoutDismiss != null) {
-                                                                onSaveWithoutDismiss(updatedBooking)
-                                                            } else {
-                                                                onConfirm(updatedBooking)
-                                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    val updatedPayments = dialogPayments.filter { it.id != p.id }
+                                                    dialogPayments = updatedPayments
+                                                    if (bookingToEdit != null) {
+                                                        val updatedBooking = bookingToEdit.copy(
+                                                            payments = updatedPayments
+                                                        )
+                                                        if (onSaveWithoutDismiss != null) {
+                                                            onSaveWithoutDismiss(updatedBooking)
+                                                        } else {
+                                                            onConfirm(updatedBooking)
                                                         }
-                                                    },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Remove payment",
-                                                        modifier = Modifier.size(16.dp),
-                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                                    )
-                                                }
-                                            } else {
+                                                    }
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
                                                 Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "Reconciled & Locked",
-                                                    modifier = Modifier.size(24.dp).padding(4.dp),
-                                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Remove payment",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                                                 )
                                             }
                                         }
