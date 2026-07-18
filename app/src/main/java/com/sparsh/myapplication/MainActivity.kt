@@ -329,7 +329,6 @@ class MainActivity : ComponentActivity() {
                                     val matchedB = bookings.value.find { it.id == bookingId }
                                     if (matchedB != null) {
                                         bookingToEdit = matchedB
-                                        showBankStatementScreen = false
                                     } else {
                                         android.widget.Toast.makeText(this@MainActivity, "Booking not found", android.widget.Toast.LENGTH_SHORT).show()
                                     }
