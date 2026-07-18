@@ -2456,17 +2456,21 @@ fun QuickBookDialog(
                                         )
                                     } else {
                                         dialogPayments.sortedBy { it.timestamp }.forEach { p ->
+                                            val isPaymentMatched = matchedPaymentIds.contains(p.id)
+                                            val rowBg = if (isPaymentMatched) Color(0xFF2E7D32).copy(alpha = 0.15f) else Color.Transparent
                                             Row(
-                                                modifier = Modifier.fillMaxWidth(),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(color = rowBg, shape = RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 val pDateFormatted = if (p.timestamp == 0L) "Unknown Date" else SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(p.timestamp))
                                                 val pMethodStr = if (p.method == "Unknown") "Unknown Mode" else p.method
-                                                val isPaymentMatched = matchedPaymentIds.contains(p.id)
                                                 val textStyle = if (isPaymentMatched) {
                                                     MaterialTheme.typography.bodySmall.copy(
-                                                        color = Color(0xFF2E7D32),
+                                                        color = Color(0xFF1B5E20),
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                 } else {
