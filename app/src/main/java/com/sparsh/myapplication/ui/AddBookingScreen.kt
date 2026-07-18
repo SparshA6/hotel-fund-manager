@@ -760,6 +760,18 @@ fun QuickBookDialog(
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    var matchedPaymentIds by remember(bookingToEdit?.id) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(bookingToEdit?.id) {
+        try {
+            val statements = bookingRepository.getStatements()
+            matchedPaymentIds = statements.filter { it.isMatched && it.matchedPaymentId.isNotEmpty() }
+                .map { it.matchedPaymentId }
+                .toSet()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     var dialogRoomItems by remember { mutableStateOf(listOf<BookingItem>()) }
     var hasDormBooking by remember { mutableStateOf(false) }
     var dormRoom by remember { mutableStateOf("A") }
@@ -2451,10 +2463,19 @@ fun QuickBookDialog(
                                             ) {
                                                 val pDateFormatted = if (p.timestamp == 0L) "Unknown Date" else SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(p.timestamp))
                                                 val pMethodStr = if (p.method == "Unknown") "Unknown Mode" else p.method
+                                                val isPaymentMatched = matchedPaymentIds.contains(p.id)
+                                                val textStyle = if (isPaymentMatched) {
+                                                    MaterialTheme.typography.bodySmall.copy(
+                                                        color = Color(0xFF2E7D32),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                } else {
+                                                    MaterialTheme.typography.bodySmall
+                                                }
                                                 Text(
-                                                    text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted",
+                                                    text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted" + if (isPaymentMatched) " [Reconciled]" else "",
                                                     fontSize = 12.sp,
-                                                    style = MaterialTheme.typography.bodySmall
+                                                    style = textStyle
                                                 )
                                                 IconButton(
                                                     onClick = {

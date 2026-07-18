@@ -372,6 +372,7 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 AddUnassignedBookingDialog(
                                     bookingToEdit = bookingToEdit,
+                                    bookingRepository = bookingRepository,
                                     onDismiss = { bookingToEdit = null },
                                     onConfirm = { updatedBooking ->
                                         coroutineScope.launch {

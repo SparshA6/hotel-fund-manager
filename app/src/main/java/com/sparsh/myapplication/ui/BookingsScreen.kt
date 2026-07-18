@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.sparsh.myapplication.Booking
+import com.sparsh.myapplication.BookingRepository
 import com.sparsh.myapplication.BookingItem
 import com.sparsh.myapplication.PaymentDetail
 import com.sparsh.myapplication.getRoomsForCategory
@@ -521,6 +522,7 @@ fun getPlatformColorsForUnassigned(platform: String): Pair<Color, Color> {
 @Composable
 fun AddUnassignedBookingDialog(
     bookingToEdit: Booking? = null,
+    bookingRepository: BookingRepository? = null,
     onDismiss: () -> Unit,
     onConfirm: (Booking) -> Unit,
     onSaveWithoutDismiss: ((Booking) -> Unit)? = null
@@ -551,6 +553,20 @@ fun AddUnassignedBookingDialog(
     var newPaymentDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var advancePaymentIsUnknown by remember(bookingToEdit?.id) { mutableStateOf(false) }
     var newPaymentIsUnknown by remember(bookingToEdit?.id) { mutableStateOf(false) }
+ 
+    var matchedPaymentIds by remember(bookingToEdit?.id) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(bookingToEdit?.id) {
+        if (bookingRepository != null) {
+            try {
+                val statements = bookingRepository.getStatements()
+                matchedPaymentIds = statements.filter { it.isMatched && it.matchedPaymentId.isNotEmpty() }
+                    .map { it.matchedPaymentId }
+                    .toSet()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     var bookingNights by remember(bookingToEdit?.id) {
         mutableStateOf(bookingToEdit?.items?.map { it.nights }?.maxOrNull() ?: 1)
@@ -1358,10 +1374,19 @@ fun AddUnassignedBookingDialog(
                                         ) {
                                             val pDateFormatted = if (p.timestamp == 0L) "Unknown Date" else SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(p.timestamp))
                                             val pMethodStr = if (p.method == "Unknown") "Unknown Mode" else p.method
+                                            val isPaymentMatched = matchedPaymentIds.contains(p.id)
+                                            val textStyle = if (isPaymentMatched) {
+                                                MaterialTheme.typography.bodySmall.copy(
+                                                    color = Color(0xFF2E7D32),
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            } else {
+                                                MaterialTheme.typography.bodySmall
+                                            }
                                             Text(
-                                                text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted",
+                                                text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted" + if (isPaymentMatched) " [Reconciled]" else "",
                                                 fontSize = 12.sp,
-                                                style = MaterialTheme.typography.bodySmall
+                                                style = textStyle
                                             )
                                             IconButton(
                                                 onClick = {

@@ -126,6 +126,61 @@ function writeLocalStatements(statements) {
   }
 }
 
+async function cleanupReconciliation(bookingId, bookingData) {
+  try {
+    let statements = [];
+    if (isUsingMongoDB) {
+      statements = await StatementRecord.find({ matchedBookingId: bookingId });
+    } else {
+      statements = readLocalStatements().filter(s => s.matchedBookingId === bookingId);
+    }
+
+    if (statements.length === 0) return;
+
+    const updatedStatements = isUsingMongoDB ? [] : [...readLocalStatements()];
+
+    for (let statement of statements) {
+      let stillValid = false;
+      if (bookingData && bookingData.payments && Array.isArray(bookingData.payments)) {
+        const payment = bookingData.payments.find(p => p.id === statement.matchedPaymentId);
+        if (payment && Math.abs((parseFloat(payment.amount) || 0) - statement.amount) < 0.01) {
+          stillValid = true;
+        }
+      }
+
+      if (!stillValid) {
+        statement.isMatched = false;
+        statement.matchedBookingId = '';
+        statement.matchedPaymentId = '';
+        statement.description = statement.description.replace(/\s*\[Matched:.*\]$/, '');
+
+        if (isUsingMongoDB) {
+          await StatementRecord.updateOne(
+            { id: statement.id },
+            {
+              isMatched: false,
+              matchedBookingId: '',
+              matchedPaymentId: '',
+              description: statement.description
+            }
+          );
+        } else {
+          const idx = updatedStatements.findIndex(s => s.id === statement.id);
+          if (idx !== -1) {
+            updatedStatements[idx] = statement;
+          }
+        }
+      }
+    }
+
+    if (!isUsingMongoDB) {
+      writeLocalStatements(updatedStatements);
+    }
+  } catch (error) {
+    console.error('Error cleaning up reconciliation:', error);
+  }
+}
+
 // Connect to MongoDB Atlas
 const maskedURI = MONGODB_URI.replace(/:([^:@]+)@/, ':***@');
 console.log('Attempting to connect to MongoDB URI:', maskedURI);
@@ -348,6 +403,7 @@ app.post('/api/bookings', async (req, res) => {
         bookingData,
         { new: true, upsert: true, runValidators: true }
       );
+      await cleanupReconciliation(bookingData.id, bookingData);
       res.json(updatedBooking);
     } else {
       const bookings = readLocalBookings();
@@ -358,6 +414,7 @@ app.post('/api/bookings', async (req, res) => {
         bookings.push(bookingData);
       }
       writeLocalBookings(bookings);
+      await cleanupReconciliation(bookingData.id, bookingData);
       res.json(bookingData);
     }
   } catch (error) {
@@ -382,6 +439,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
       if (!result) {
         return res.status(404).json({ error: 'Booking not found' });
       }
+      await cleanupReconciliation(bookingId, null);
       res.json({ message: 'Booking deleted successfully', id: bookingId });
     } else {
       const bookings = readLocalBookings();
@@ -392,6 +450,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
       bookingToDelete = bookings[index];
       const filtered = bookings.filter(b => b.id !== bookingId);
       writeLocalBookings(filtered);
+      await cleanupReconciliation(bookingId, null);
       res.json({ message: 'Booking deleted successfully', id: bookingId });
     }
 
