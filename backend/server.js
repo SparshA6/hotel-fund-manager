@@ -1261,7 +1261,10 @@ app.post('/api/statements/match', async (req, res) => {
         for (const p of b.payments) {
           const methodStr = String(p.method || '').toLowerCase();
           if (methodStr.includes('gpay') || methodStr.includes('g-pay') || methodStr.includes('g pay') || methodStr.includes('hotel acc')) {
-            const pDateStr = new Date(p.timestamp).toISOString().split('T')[0];
+            // Use IST (UTC+5:30) for date extraction to match statement dates from Excel
+            const pDate = new Date(p.timestamp);
+            const istDate = new Date(pDate.getTime() + 5.5 * 60 * 60 * 1000);
+            const pDateStr = istDate.toISOString().split('T')[0];
             paymentsPool.push({
               bookingId: b.id,
               guestName: b.guestName,
