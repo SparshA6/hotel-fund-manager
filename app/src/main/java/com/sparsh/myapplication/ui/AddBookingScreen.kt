@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -2468,48 +2469,50 @@ fun QuickBookDialog(
                                             ) {
                                                 val pDateFormatted = if (p.timestamp == 0L) "Unknown Date" else SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(p.timestamp))
                                                 val pMethodStr = if (p.method == "Unknown") "Unknown Mode" else p.method
-                                                val textStyle = if (isPaymentMatched) {
-                                                    MaterialTheme.typography.bodySmall.copy(
-                                                        color = Color(0xFF1B5E20),
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                } else {
-                                                    MaterialTheme.typography.bodySmall
-                                                }
+                                                val textStyle = MaterialTheme.typography.bodySmall
                                                 Text(
                                                     text = "₹${formatDouble(p.amount)} via $pMethodStr on $pDateFormatted" + if (isPaymentMatched) " [Reconciled]" else "",
                                                     fontSize = 12.sp,
                                                     style = textStyle
                                                 )
-                                                IconButton(
-                                                    onClick = {
-                                                        val updatedPayments = dialogPayments.filter { it.id != p.id }
-                                                        dialogPayments = updatedPayments
-                                                        if (bookingToEdit != null) {
-                                                            val finalUpdatedPayments = if (platform != "Direct") {
-                                                                val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
-                                                                    ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
-                                                                listOf(portalBase) + updatedPayments
-                                                            } else {
-                                                                updatedPayments
+                                                if (!isPaymentMatched) {
+                                                    IconButton(
+                                                        onClick = {
+                                                            val updatedPayments = dialogPayments.filter { it.id != p.id }
+                                                            dialogPayments = updatedPayments
+                                                            if (bookingToEdit != null) {
+                                                                val finalUpdatedPayments = if (platform != "Direct") {
+                                                                    val portalBase = bookingToEdit.payments.firstOrNull { it.id == "portal_base" }
+                                                                        ?: PaymentDetail(id = "portal_base", amount = bookingToEdit.baseAmountCharged - bookingToEdit.discount, method = "Portal (Auto)")
+                                                                    listOf(portalBase) + updatedPayments
+                                                                } else {
+                                                                    updatedPayments
+                                                                }
+                                                                val updatedBooking = bookingToEdit.copy(
+                                                                    payments = finalUpdatedPayments
+                                                                )
+                                                                if (onSaveWithoutDismiss != null) {
+                                                                    onSaveWithoutDismiss(updatedBooking)
+                                                                } else {
+                                                                    onConfirm(updatedBooking)
+                                                                }
                                                             }
-                                                            val updatedBooking = bookingToEdit.copy(
-                                                                payments = finalUpdatedPayments
-                                                            )
-                                                            if (onSaveWithoutDismiss != null) {
-                                                                onSaveWithoutDismiss(updatedBooking)
-                                                            } else {
-                                                                onConfirm(updatedBooking)
-                                                            }
-                                                        }
-                                                    },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Delete,
+                                                            contentDescription = "Remove payment",
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                        )
+                                                    }
+                                                } else {
                                                     Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Remove payment",
-                                                        modifier = Modifier.size(16.dp),
-                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Reconciled & Locked",
+                                                        modifier = Modifier.size(24.dp).padding(4.dp),
+                                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                                                     )
                                                 }
                                             }
