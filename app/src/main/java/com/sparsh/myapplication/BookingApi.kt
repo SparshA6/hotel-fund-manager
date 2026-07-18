@@ -68,4 +68,17 @@ interface BookingApi {
 
     @DELETE("api/backups/{id}")
     suspend fun deleteBackup(@Path("id") id: String): Response<Unit>
+
+    @Multipart
+    @POST("api/statements/upload")
+    suspend fun uploadStatement(@Part file: okhttp3.MultipartBody.Part): List<StatementRecord>
+
+    @GET("api/statements")
+    suspend fun getStatements(): List<StatementRecord>
+
+    @POST("api/statements/match")
+    suspend fun matchStatements(): List<StatementRecord>
+
+    @DELETE("api/statements")
+    suspend fun clearStatements(): Response<Unit>
 }

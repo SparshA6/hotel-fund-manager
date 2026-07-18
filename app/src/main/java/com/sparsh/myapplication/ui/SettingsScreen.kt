@@ -35,6 +35,7 @@ fun SettingsScreen(
     onRoleChanged: (Boolean) -> Unit,
     onRestored: (List<Booking>) -> Unit,
     onLogout: () -> Unit,
+    onNavigateToBankReconciliation: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -377,6 +378,46 @@ fun SettingsScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // Bank Statement Reconciliation Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Bank Statement Reconciliation",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Upload GPay/UPI bank statement Excel sheets to reconcile deposit records with recorded booking payments.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                        Button(
+                            onClick = onNavigateToBankReconciliation,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reconcile"
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Reconcile Bank Statements", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

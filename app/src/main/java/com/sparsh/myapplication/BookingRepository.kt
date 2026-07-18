@@ -280,6 +280,22 @@ class BookingRepository(context: Context) {
             ?: PortalSettings(platform)
     }
 
+    suspend fun uploadStatement(filePart: okhttp3.MultipartBody.Part): List<StatementRecord> = withContext(Dispatchers.IO) {
+        api.uploadStatement(filePart)
+    }
+
+    suspend fun getStatements(): List<StatementRecord> = withContext(Dispatchers.IO) {
+        api.getStatements()
+    }
+
+    suspend fun matchStatements(): List<StatementRecord> = withContext(Dispatchers.IO) {
+        api.matchStatements()
+    }
+
+    suspend fun clearStatements() = withContext(Dispatchers.IO) {
+        api.clearStatements()
+    }
+
     companion object {
         private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
     }

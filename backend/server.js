@@ -4,6 +4,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const multer = require('multer');
+const xlsx = require('xlsx');
 require('dotenv').config();
 
 const app = express();
@@ -98,6 +100,29 @@ function writeLocalPortalSettings(settings) {
     fs.writeFileSync(PORTAL_SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), 'utf8');
   } catch (error) {
     console.error('Error writing local portal settings file:', error);
+  }
+}
+
+const STATEMENTS_FILE_PATH = path.join(__dirname, 'statements.json');
+
+function readLocalStatements() {
+  try {
+    if (!fs.existsSync(STATEMENTS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(STATEMENTS_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading local statements file:', error);
+    return [];
+  }
+}
+
+function writeLocalStatements(statements) {
+  try {
+    fs.writeFileSync(STATEMENTS_FILE_PATH, JSON.stringify(statements, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local statements file:', error);
   }
 }
 
@@ -200,6 +225,18 @@ const PortalSettingsSchema = new mongoose.Schema({
 });
 
 const PortalSettings = mongoose.model('PortalSettings', PortalSettingsSchema);
+
+const StatementRecordSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  date: { type: String, required: true },
+  description: { type: String, required: true },
+  amount: { type: Number, required: true },
+  isMatched: { type: Boolean, default: false },
+  matchedBookingId: { type: String, default: "" },
+  matchedPaymentId: { type: String, default: "" }
+});
+
+const StatementRecord = mongoose.model('StatementRecord', StatementRecordSchema);
 
 const DEFAULT_PORTAL_SETTINGS = [
   { platform: "MMT", commissionRate: 20.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
@@ -932,6 +969,299 @@ app.delete('/api/bookings/:id/guest-ids/:cardId/images/:imageId', async (req, re
   } catch (error) {
     console.error('Error deleting ID image:', error);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Bank Statement Reconciliation Endpoints
+
+// Helper function to format Excel date strings to YYYY-MM-DD
+function formatDateString(rawDate) {
+  if (!rawDate) return null;
+  
+  if (typeof rawDate === 'number') {
+    const excelEpoch = new Date(1899, 11, 30);
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const dateObj = new Date(excelEpoch.getTime() + rawDate * msPerDay);
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toISOString().split('T')[0];
+    }
+  }
+
+  const str = String(rawDate).trim();
+  
+  const dmy = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, '0');
+    const month = dmy[2].padStart(2, '0');
+    const year = dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const ymd = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (ymd) {
+    const year = ymd[1];
+    const month = ymd[2].padStart(2, '0');
+    const day = ymd[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsedMs = Date.parse(str);
+  if (!isNaN(parsedMs)) {
+    return new Date(parsedMs).toISOString().split('T')[0];
+  }
+
+  return null;
+}
+
+// Main parser logic
+function parseExcelStatement(buffer) {
+  const workbook = xlsx.read(buffer, { type: 'buffer' });
+  const records = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+
+    let headerIndex = -1;
+    let colIndices = {
+      date: -1,
+      desc: -1,
+      credit: -1,
+      debit: -1,
+      type: -1
+    };
+
+    for (let i = 0; i < Math.min(rows.length, 30); i++) {
+      const row = rows[i];
+      if (!row || !Array.isArray(row)) continue;
+
+      let hasDate = false;
+      let hasDesc = false;
+      let hasAmount = false;
+
+      for (let j = 0; j < row.length; j++) {
+        const val = String(row[j] || '').toLowerCase().trim();
+        if (val.includes('date') || val === 'txn date' || val === 'value date') {
+          hasDate = true;
+          colIndices.date = j;
+        } else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) {
+          hasDesc = true;
+          colIndices.desc = j;
+        } else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) {
+          hasAmount = true;
+          colIndices.credit = j;
+        } else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) {
+          colIndices.debit = j;
+        } else if (val === 'amount' || val === 'txn amount') {
+          hasAmount = true;
+          if (colIndices.credit === -1) {
+            colIndices.credit = j;
+          }
+        } else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') {
+          colIndices.type = j;
+        }
+      }
+
+      if (hasDate && hasDesc && hasAmount) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    if (headerIndex !== -1 && colIndices.date !== -1 && colIndices.desc !== -1 && colIndices.credit !== -1) {
+      for (let i = headerIndex + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        let rawDate = row[colIndices.date];
+        let rawDesc = row[colIndices.desc];
+        let rawCredit = row[colIndices.credit];
+        let rawDebit = colIndices.debit !== -1 ? row[colIndices.debit] : null;
+        let rawType = colIndices.type !== -1 ? row[colIndices.type] : '';
+
+        if (!rawDate || !rawDesc) continue;
+
+        let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
+        let debitAmt = rawDebit !== null ? (parseFloat(String(rawDebit || '0').replace(/,/g, '')) || 0) : 0;
+        
+        if (colIndices.type !== -1 && rawType) {
+          const typeStr = String(rawType).toUpperCase().trim();
+          if (typeStr.includes('DR') || typeStr === 'D') {
+            debitAmt = creditAmt;
+            creditAmt = 0;
+          }
+        }
+
+        // Only parse deposit transactions (credits > 0, debits = 0)
+        if (creditAmt > 0 && debitAmt === 0) {
+          let formattedDate = formatDateString(rawDate);
+          if (formattedDate) {
+            records.push({
+              date: formattedDate,
+              description: String(rawDesc).trim(),
+              amount: creditAmt
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return records;
+}
+
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
+
+// Upload Endpoint
+app.post('/api/statements/upload', upload.single('statement'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No statement file uploaded' });
+    }
+
+    const parsedRecords = parseExcelStatement(req.file.buffer);
+    
+    // Save to DB or file fallback
+    const statementsToSave = parsedRecords.map(r => ({
+      id: require('crypto').randomUUID(),
+      date: r.date,
+      description: r.description,
+      amount: r.amount,
+      isMatched: false,
+      matchedBookingId: '',
+      matchedPaymentId: ''
+    }));
+
+    if (isUsingMongoDB) {
+      await StatementRecord.insertMany(statementsToSave);
+    } else {
+      const existing = readLocalStatements();
+      const updated = [...existing, ...statementsToSave];
+      writeLocalStatements(updated);
+    }
+
+    const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    res.json(all);
+  } catch (error) {
+    console.error('Error uploading statement:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get statements Endpoint
+app.get('/api/statements', async (req, res) => {
+  try {
+    const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    res.json(all);
+  } catch (error) {
+    console.error('Error fetching statements:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear statements Endpoint
+app.delete('/api/statements', async (req, res) => {
+  try {
+    if (isUsingMongoDB) {
+      await StatementRecord.deleteMany();
+    } else {
+      writeLocalStatements([]);
+    }
+    res.sendStatus(204);
+  } catch (error) {
+    console.error('Error clearing statements:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Match statements Endpoint
+app.post('/api/statements/match', async (req, res) => {
+  try {
+    let statements = [];
+    if (isUsingMongoDB) {
+      statements = await StatementRecord.find({ isMatched: false });
+    } else {
+      statements = readLocalStatements().filter(s => !s.isMatched);
+    }
+
+    if (statements.length === 0) {
+      const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+      return res.json(all);
+    }
+
+    let bookings = [];
+    if (isUsingMongoDB) {
+      bookings = await Booking.find();
+    } else {
+      bookings = readLocalBookings();
+    }
+
+    const paymentsPool = [];
+    for (const b of bookings) {
+      if (b.payments && Array.isArray(b.payments)) {
+        for (const p of b.payments) {
+          const methodStr = String(p.method || '').toLowerCase();
+          if (methodStr.includes('gpay') || methodStr.includes('g-pay') || methodStr.includes('g pay') || methodStr.includes('hotel acc')) {
+            const pDateStr = new Date(p.timestamp).toISOString().split('T')[0];
+            paymentsPool.push({
+              bookingId: b.id,
+              guestName: b.guestName,
+              paymentId: p.id,
+              amount: parseFloat(p.amount) || 0,
+              date: pDateStr,
+              isMatched: false
+            });
+          }
+        }
+      }
+    }
+
+    const updatedStatements = isUsingMongoDB ? [] : [...readLocalStatements()];
+    
+    for (let statement of statements) {
+      const matchIndex = paymentsPool.findIndex(p => 
+        !p.isMatched &&
+        p.date === statement.date &&
+        Math.abs(p.amount - statement.amount) < 0.01
+      );
+
+      if (matchIndex !== -1) {
+        const matchedPayment = paymentsPool[matchIndex];
+        matchedPayment.isMatched = true;
+
+        statement.isMatched = true;
+        statement.matchedBookingId = matchedPayment.bookingId;
+        statement.matchedPaymentId = matchedPayment.paymentId;
+        statement.description = `${statement.description} [Matched: ${matchedPayment.guestName}]`;
+
+        if (isUsingMongoDB) {
+          await StatementRecord.updateOne(
+            { id: statement.id },
+            { 
+              isMatched: true,
+              matchedBookingId: statement.matchedBookingId,
+              matchedPaymentId: statement.matchedPaymentId,
+              description: statement.description
+            }
+          );
+        } else {
+          const idx = updatedStatements.findIndex(s => s.id === statement.id);
+          if (idx !== -1) {
+            updatedStatements[idx] = statement;
+          }
+        }
+      }
+    }
+
+    if (!isUsingMongoDB) {
+      writeLocalStatements(updatedStatements);
+    }
+
+    const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    res.json(all);
+  } catch (error) {
+    console.error('Error matching statements:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

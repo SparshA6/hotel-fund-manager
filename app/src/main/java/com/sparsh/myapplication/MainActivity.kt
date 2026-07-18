@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
                 var isAddBookingInitialized by remember { mutableStateOf(true) }
                 var isBookingsScreenInitialized by remember { mutableStateOf(true) }
                 var isSearchInitialized by remember { mutableStateOf(true) }
+                var showBankStatementScreen by remember { mutableStateOf(false) }
 
                 if (!isLoggedIn) {
                     LoginScreen(onLoginSuccess = onLoginSuccess)
@@ -133,6 +134,7 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 0,
                                 onClick = { 
                                     currentTab = 0 
+                                    showBankStatementScreen = false
                                 },
                                 label = { Text("Dashboard") },
                                 icon = {
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 1,
                                 onClick = { 
                                     currentTab = 1 
+                                    showBankStatementScreen = false
                                 },
                                 label = { Text("Chart") },
                                 icon = {
@@ -159,6 +162,7 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 2,
                                 onClick = { 
                                     currentTab = 2 
+                                    showBankStatementScreen = false
                                 },
                                 label = { Text("Bookings") },
                                 icon = {
@@ -172,6 +176,7 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 3,
                                 onClick = { 
                                     currentTab = 3 
+                                    showBankStatementScreen = false
                                 },
                                 label = { Text("Search") },
                                 icon = {
@@ -185,6 +190,7 @@ class MainActivity : ComponentActivity() {
                                 selected = currentTab == 4,
                                 onClick = { 
                                     currentTab = 4 
+                                    showBankStatementScreen = false
                                 },
                                 label = { Text("Settings") },
                                 icon = {
@@ -305,6 +311,20 @@ class MainActivity : ComponentActivity() {
                                     bookings.value = restoredBookings
                                 },
                                 onLogout = onLogout,
+                                onNavigateToBankReconciliation = {
+                                    showBankStatementScreen = true
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        if (showBankStatementScreen) {
+                            androidx.activity.compose.BackHandler(enabled = true) {
+                                showBankStatementScreen = false
+                            }
+                            com.sparsh.myapplication.ui.BankStatementScreen(
+                                bookingRepository = bookingRepository,
+                                onBack = { showBankStatementScreen = false },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
