@@ -211,6 +211,75 @@ class BookingRepository(context: Context) {
         remoteBookings.sortedByDescending { it.timestamp }
     }
 
+    private val KEY_PORTAL_SETTINGS = "key_portal_settings"
+
+    fun getDefaultPortalSettings(): List<PortalSettings> {
+        return listOf(
+            PortalSettings("MMT", commissionRate = 20.0f, propertyGstRate = 12.0f, gstOnCommissionRate = 18.0f, tdsRate = 1.0f, tcsRate = 1.0f, serviceCharge = 0.0f),
+            PortalSettings("Goibibo", commissionRate = 15.0f, propertyGstRate = 12.0f, gstOnCommissionRate = 18.0f, tdsRate = 1.0f, tcsRate = 1.0f, serviceCharge = 0.0f),
+            PortalSettings("Yatra", commissionRate = 15.0f, propertyGstRate = 0.0f, gstOnCommissionRate = 0.0f, tdsRate = 1.0f, tcsRate = 1.0f, serviceCharge = 0.0f),
+            PortalSettings("Booking.com", commissionRate = 15.0f, propertyGstRate = 12.0f, gstOnCommissionRate = 0.0f, tdsRate = 0.0f, tcsRate = 0.0f, paymentProcessingFeeRate = 2.0f),
+            PortalSettings("Agoda", commissionRate = 15.0f, propertyGstRate = 12.0f, gstOnCommissionRate = 18.0f, tdsRate = 1.0f, tcsRate = 1.0f, serviceCharge = 0.0f),
+            PortalSettings("Cleartrip", commissionRate = 12.0f, propertyGstRate = 12.0f, gstOnCommissionRate = 18.0f, tdsRate = 1.0f, tcsRate = 1.0f, serviceCharge = 0.0f)
+        )
+    }
+
+    private var cachedPortalSettings: List<PortalSettings>? = null
+
+    fun getLocalPortalSettings(): List<PortalSettings> {
+        val cached = cachedPortalSettings
+        if (cached != null) return cached
+        val settingsJson = sharedPreferences.getString(KEY_PORTAL_SETTINGS, null) ?: return getDefaultPortalSettings()
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<PortalSettings>>() {}.type
+            val result: List<PortalSettings> = gson.fromJson(settingsJson, type)
+            cachedPortalSettings = result
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            getDefaultPortalSettings()
+        }
+    }
+
+    fun saveLocalPortalSettings(settings: List<PortalSettings>) {
+        cachedPortalSettings = settings
+        val json = gson.toJson(settings)
+        sharedPreferences.edit().putString(KEY_PORTAL_SETTINGS, json).apply()
+    }
+
+    suspend fun getPortalSettings(): List<PortalSettings> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("BookingRepository", "Fetching portal settings from cloud...")
+            val remoteSettings = api.getPortalSettings()
+            Log.d("BookingRepository", "Fetched ${remoteSettings.size} portal settings from cloud. Updating cache.")
+            saveLocalPortalSettings(remoteSettings)
+            remoteSettings
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Cloud portal settings fetch failed: ${e.message}. Falling back to cache.")
+            getLocalPortalSettings()
+        }
+    }
+
+    suspend fun savePortalSettings(settings: PortalSettings) = withContext(Dispatchers.IO) {
+        val localSettings = getLocalPortalSettings().toMutableList()
+        localSettings.removeAll { it.platform.equals(settings.platform, ignoreCase = true) }
+        localSettings.add(settings)
+        saveLocalPortalSettings(localSettings)
+
+        try {
+            Log.d("BookingRepository", "Saving portal settings for ${settings.platform} to cloud...")
+            api.savePortalSettings(settings)
+            Log.d("BookingRepository", "Saved portal settings to cloud successfully.")
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to save portal settings to cloud: ${e.message}. Saved locally.")
+        }
+    }
+
+    fun getPortalSettingsForPlatform(platform: String): PortalSettings {
+        return getLocalPortalSettings().find { it.platform.equals(platform, ignoreCase = true) }
+            ?: PortalSettings(platform)
+    }
+
     companion object {
         private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
     }

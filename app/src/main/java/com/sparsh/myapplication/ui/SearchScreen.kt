@@ -97,7 +97,7 @@ fun SearchScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             
-            val platforms = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
+            val platforms = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier

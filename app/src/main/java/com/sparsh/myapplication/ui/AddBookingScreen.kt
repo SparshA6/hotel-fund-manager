@@ -248,6 +248,7 @@ fun getPlatformColors(platform: String, isPending: Boolean): Pair<Color, Color> 
                 "Booking.com" -> Pair(Color(0xFF0D47A1), Color(0xFFBBDEFB)) // Dark Blue
                 "Agoda" -> Pair(Color(0xFF4A148C), Color(0xFFE1BEE7))       // Dark Purple
                 "Goibibo" -> Pair(Color(0xFFE65100), Color(0xFFFFCC80))     // Dark Orange
+                "Yatra" -> Pair(Color(0xFF880E4F), Color(0xFFF8BBD0))       // Dark Rose / Crimson
                 "Cleartrip" -> Pair(Color(0xFFF57F17), Color(0xFFFFE082))   // Dark Yellow
                 else -> Pair(Color(0xFF263238), Color(0xFFCFD8DC))          // Dark Grey
             }
@@ -262,7 +263,8 @@ fun getPlatformColors(platform: String, isPending: Boolean): Pair<Color, Color> 
                 "Booking.com" -> Pair(Color(0xFFE3F2FD), Color(0xFF0D47A1)) // Light Blue
                 "Agoda" -> Pair(Color(0xFFF3E5F5), Color(0xFF4A148C))       // Light Purple
                 "Goibibo" -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))     // Light Orange
-                "Cleartrip" -> Pair(Color(0xFFFFFDE7), Color(0xFFF57F17))   // Light Yellow
+                "Yatra" -> Pair(Color(0xFFFCE4EC), Color(0xFF880E4F))       // Light Rose / Crimson
+                "Cleartrip" -> Pair(Color(0xFFFFFDE7), Color(0xFFF57F17))   // Light Yellowow
                 else -> Pair(Color(0xFFECEFF1), Color(0xFF263238))          // Light Grey
             }
         }
@@ -1064,7 +1066,7 @@ fun QuickBookDialog(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(4.dp))
-                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
+                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
                         platformsList.chunked(3).forEach { rowPlatforms ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -1514,41 +1516,43 @@ fun QuickBookDialog(
                                                     )
 
                                                     // Price Input Field
-                                                    OutlinedTextField(
-                                                        value = displayRate,
-                                                        onValueChange = { newRate ->
-                                                            val updatedList = adjustRatesList(ratesList, itemNights).toMutableList()
-                                                            if (itemSamePrice) {
-                                                                for (k in 0 until itemNights) {
-                                                                    updatedList[k] = newRate
+                                                    if (platform == "Direct") {
+                                                        OutlinedTextField(
+                                                            value = displayRate,
+                                                            onValueChange = { newRate ->
+                                                                val updatedList = adjustRatesList(ratesList, itemNights).toMutableList()
+                                                                if (itemSamePrice) {
+                                                                    for (k in 0 until itemNights) {
+                                                                        updatedList[k] = newRate
+                                                                    }
+                                                                } else {
+                                                                    updatedList[nightIndex] = newRate
                                                                 }
-                                                            } else {
-                                                                updatedList[nightIndex] = newRate
-                                                            }
-                                                            itemRatesMap = itemRatesMap + (item.id to updatedList)
+                                                                itemRatesMap = itemRatesMap + (item.id to updatedList)
 
-                                                            val index = dialogRoomItems.indexOf(item)
-                                                            if (index != -1) {
-                                                                val newList = dialogRoomItems.toMutableList()
-                                                                newList[index] = item.copy(amount = updatedList.map { it.toDoubleOrNull() ?: 0.0 }.sum())
-                                                                dialogRoomItems = newList
-                                                            }
-                                                            if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
-                                                                roomRateErrors = roomRateErrors - item.id
-                                                            }
-                                                        },
-                                                        placeholder = { Text("Rate") },
-                                                        prefix = { Text("₹") },
-                                                        isError = roomRateErrors[item.id] != null,
-                                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                        singleLine = true,
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        modifier = Modifier.weight(1f).height(50.dp),
-                                                        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
-                                                    )
+                                                                val index = dialogRoomItems.indexOf(item)
+                                                                if (index != -1) {
+                                                                    val newList = dialogRoomItems.toMutableList()
+                                                                    newList[index] = item.copy(amount = updatedList.map { it.toDoubleOrNull() ?: 0.0 }.sum())
+                                                                    dialogRoomItems = newList
+                                                                }
+                                                                if ((newRate.toDoubleOrNull() ?: 0.0) > 0.0) {
+                                                                    roomRateErrors = roomRateErrors - item.id
+                                                                }
+                                                            },
+                                                            placeholder = { Text("Rate") },
+                                                            prefix = { Text("₹") },
+                                                            isError = roomRateErrors[item.id] != null,
+                                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                            singleLine = true,
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            modifier = Modifier.weight(1f).height(50.dp),
+                                                            textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                                                        )
+                                                    }
 
                                                     // Room Dropdown
-                                                    Box(modifier = Modifier.width(130.dp)) {
+                                                    Box(modifier = if (platform == "Direct") Modifier.width(130.dp) else Modifier.weight(1f)) {
                                                         val hasNoErr = roomNoErrors[item.id]
                                                         OutlinedCard(
                                                             modifier = Modifier
@@ -2015,164 +2019,211 @@ fun QuickBookDialog(
                     }
                 }
 
-                // Custom Bill (if Direct)
-                if (platform == "Direct") {
-                    item {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Custom Bill Total", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    val hasBoth = dialogRoomItems.any { it.category == "Room" } && dialogRoomItems.any { it.category == "Dorm" }
-                                    val descText = if (hasBoth) "Different from sum of room & bed rates" else if (isDormMode) "Different from sum of bed rates" else "Different from sum of room rates"
-                                    Text(descText, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                }
-                                Switch(checked = isBillOn, onCheckedChange = { isBillOn = it })
-                            }
-                            if (isBillOn) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                OutlinedTextField(
-                                    value = billAmountStr,
-                                    onValueChange = { 
-                                        billAmountStr = it 
-                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
-                                    },
-                                    isError = customBillError != null,
-                                    supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                    label = { Text("Custom Bill Amount") },
-                                    placeholder = { Text("e.g. 2800") },
-                                    prefix = { Text("₹ ") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                            }
-                        }
-                    }
-                }
+                // Custom Bill or Base Rate
+                                                item {
+                                                    if (platform == "Direct") {
+                                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Column(modifier = Modifier.weight(1f)) {
+                                                                    Text("Custom Bill Total", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                                    val hasBoth = dialogRoomItems.any { it.category == "Room" } && dialogRoomItems.any { it.category == "Dorm" }
+                                                                    val descText = if (hasBoth) "Different from sum of room & bed rates" else if (isDormMode) "Different from sum of bed rates" else "Different from sum of room rates"
+                                                                    Text(descText, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                                                }
+                                                                Switch(checked = isBillOn, onCheckedChange = { isBillOn = it })
+                                                            }
+                                                                                                               if (isBillOn) {
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                                OutlinedTextField(
+                                                                    value = billAmountStr,
+                                                                    onValueChange = { 
+                                                                        billAmountStr = it 
+                                                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
+                                                                    },
+                                                                    isError = customBillError != null,
+                                                                    supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                                                    label = { Text("Custom Bill Amount") },
+                                                                    placeholder = { Text("e.g. 2800") },
+                                                                    prefix = { Text("₹ ") },
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    singleLine = true,
+                                                                    shape = RoundedCornerShape(10.dp),
+                                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                                )
+                                                            }
+                                                        }
+                                                    } else {
+                                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                                            OutlinedTextField(
+                                                                value = billAmountStr,
+                                                                onValueChange = { 
+                                                                    billAmountStr = it 
+                                                                    if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
+                                                                },
+                                                                isError = customBillError != null,
+                                                                supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                                                label = { Text("Payable to Hotel") },
+                                                                placeholder = { Text("Enter final price payable to hotel") },
+                                                                prefix = { Text("₹ ") },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                singleLine = true,
+                                                                shape = RoundedCornerShape(10.dp),
+                                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                
+                                // Dynamic OTA Commission Calculation Display Label
+                                if (platform != "Direct") {
+                                    item {
+                                        val userPayable = billAmountStr.toDoubleOrNull() ?: 0.0
+                                        val portalSettings = bookingRepository.getPortalSettingsForPlatform(platform)
+                                        val breakdown = com.sparsh.myapplication.OtaCalculationEngine.calculate(platform, userPayable, portalSettings)
+                                        
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(14.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$platform Commission Breakdown",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                                
+                                                val formatMoney = { amt: Double -> "₹${String.format(java.util.Locale.US, "%.2f", amt)}" }
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Payable to Hotel (Entered):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text(formatMoney(breakdown.finalPayableAmount), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                }
+                                                
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Derived Base Rate:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                                    Text(formatMoney(breakdown.baseRate), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                
+                                                if (breakdown.propertyGst > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Property GST:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(breakdown.propertyGst), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
 
-                // Dynamic OTA Commission Calculation Display Label
-                if (platform != "Direct") {
-                    item {
-                        val calculatedSum = (dialogRoomItems.map { it.amount }.sum() + totalDormVal)
-                        val totalBillValue = if (platform == "Direct" && isBillOn) {
-                            billAmountStr.toDoubleOrNull() ?: calculatedSum
-                        } else {
-                            calculatedSum
-                        }
-                        val discountVal = discountStr.toDoubleOrNull() ?: 0.0
-                        val commBase = (totalBillValue - discountVal).coerceAtLeast(0.0)
-                        val breakdown = com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase)
-                        
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "$platform Commission Breakdown",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                                
-                                val formatMoney = { amt: Double -> "₹${String.format(java.util.Locale.US, "%.2f", amt)}" }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Guest Paid (Total):", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                    Text(formatMoney(breakdown.guestAmount), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                if (portalSettings.serviceCharge > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Service Charge:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(portalSettings.serviceCharge.toDouble()), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Gross Amount (Revenue):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text(formatMoney(breakdown.grossAmount), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Commission:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text(formatMoney(breakdown.commission), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+
+                                                if (breakdown.gstOnCommission > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("GST on Commission:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(breakdown.gstOnCommission), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Total Commission:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text(formatMoney(breakdown.totalCommission), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+
+                                                if (breakdown.tds > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("TDS:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(breakdown.tds), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+
+                                                if (breakdown.tcs > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("TCS:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(breakdown.tcs), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+
+                                                if (breakdown.processingFee > 0.0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Payment Processing Fee:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(formatMoney(breakdown.processingFee), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                                
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                                
+                                                val totalDeductions = breakdown.totalCommission + breakdown.tds + breakdown.tcs + breakdown.processingFee
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Total Deductions (Expense):", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                                    Text(formatMoney(totalDeductions), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val taxPct = com.sparsh.myapplication.SettingsManager.getTaxRate(context)
-                                    Text("Tax ($taxPct%):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(breakdown.tax), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Base Amount (Total - Tax):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(breakdown.base), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val commPct = com.sparsh.myapplication.SettingsManager.getCommissionRate(context, platform)
-                                    Text("Commission ($commPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(breakdown.commission), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val tdsPct = com.sparsh.myapplication.SettingsManager.getTdsRate(context)
-                                    Text("TDS ($tdsPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(breakdown.tds), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val tcsPct = com.sparsh.myapplication.SettingsManager.getTcsRate(context)
-                                    Text("TCS ($tcsPct% of Base):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(breakdown.tcs), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Total Deductions (Expense):", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
-                                    Text(formatMoney(breakdown.totalDeductions), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
-                                }
-                                
-                                val remainingBase = breakdown.base - breakdown.totalDeductions
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Remaining (Base - Deductions):", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(formatMoney(remainingBase), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                                
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Platform Pays Us (Remaining + Tax):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                    Text(formatMoney(breakdown.netPayout), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // Discount and Extra Price fields
                 item {
@@ -2830,16 +2881,18 @@ fun QuickBookDialog(
                                     newRoomNoErrors[item.id] = "At least one room assignment is required."
                                 }
 
-                                val ratesList = itemRatesMap[item.id] ?: listOf("")
-                                if (itemSamePrice) {
-                                    val rateVal = ratesList.firstOrNull()?.toDoubleOrNull() ?: 0.0
-                                    if (rateVal <= 0.0) {
-                                        newRoomRateErrors[item.id] = "Rate must be greater than 0."
-                                    }
-                                } else {
-                                    val hasInvalidRate = ratesList.take(itemNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
-                                    if (hasInvalidRate || ratesList.size < itemNights) {
-                                        newRoomRateErrors[item.id] = "All night rates must be greater than 0."
+                                if (platform == "Direct") {
+                                    val ratesList = itemRatesMap[item.id] ?: listOf("")
+                                    if (itemSamePrice) {
+                                        val rateVal = ratesList.firstOrNull()?.toDoubleOrNull() ?: 0.0
+                                        if (rateVal <= 0.0) {
+                                            newRoomRateErrors[item.id] = "Rate must be greater than 0."
+                                        }
+                                    } else {
+                                        val hasInvalidRate = ratesList.take(itemNights).any { (it.toDoubleOrNull() ?: 0.0) <= 0.0 }
+                                        if (hasInvalidRate || ratesList.size < itemNights) {
+                                            newRoomRateErrors[item.id] = "All night rates must be greater than 0."
+                                        }
                                     }
                                 }
                             }
@@ -2980,55 +3033,72 @@ fun QuickBookDialog(
                                 emptyList()
                             }
 
-                            val roomBookingItems = dialogRoomItems.map { item ->
-                                val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
-                                val itemSamePrice = if (platform == "Direct") (itemSamePriceMap[item.id] ?: samePriceForAllNights) else samePriceForAllNights
-                                val ratesList = (itemRatesMap[item.id] ?: listOf("")).take(itemNights).map { it.toDoubleOrNull() ?: 0.0 }
-                                
-                                val ratesPerNight = if (itemSamePrice) {
-                                    val ratePerNight = ratesList.firstOrNull() ?: 0.0
-                                    List(itemNights) { ratePerNight }
-                                } else {
-                                    ratesList
-                                }
-                                
-                                item.copy(
-                                    category = if (item.roomNumber.isNotBlank()) {
-                                        val firstRoom = item.roomNumber.split(",").firstOrNull { it.isNotBlank() } ?: ""
-                                        if (firstRoom.isNotBlank()) getRoomCategory(firstRoom) else item.category
-                                    } else item.category,
-                                    amount = ratesPerNight.sum(),
-                                    nights = itemNights,
-                                    rates = ratesPerNight
-                                )
-                            }
+                             val portalSettings = if (platform != "Direct") bookingRepository.getPortalSettingsForPlatform(platform) else null
+                             val userPayable = if (platform != "Direct") (billAmountStr.toDoubleOrNull() ?: 0.0) else 0.0
+                             val breakdown = if (platform != "Direct" && portalSettings != null) {
+                                 com.sparsh.myapplication.OtaCalculationEngine.calculate(platform, userPayable, portalSettings)
+                             } else null
 
-                            val updatedItems = roomBookingItems + dormBookingItems
-                            val calculatedSum = updatedItems.sumOf { it.amount }
+                             val roomBookingItems = dialogRoomItems.map { item ->
+                                 val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                                 val ratesPerNight = if (platform == "Direct") {
+                                     val itemSamePrice = itemSamePriceMap[item.id] ?: samePriceForAllNights
+                                     val ratesList = (itemRatesMap[item.id] ?: listOf("")).take(itemNights).map { it.toDoubleOrNull() ?: 0.0 }
+                                     if (itemSamePrice) {
+                                         val ratePerNight = ratesList.firstOrNull() ?: 0.0
+                                         List(itemNights) { ratePerNight }
+                                     } else {
+                                         ratesList
+                                     }
+                                 } else {
+                                     val otaPayable = userPayable
+                                     val totalUnits = dialogRoomItems.size.coerceAtLeast(1)
+                                     val itemAmount = otaPayable / totalUnits
+                                     val ratePerNight = itemAmount / bookingNights
+                                     List(bookingNights) { ratePerNight }
+                                 }
+                                 
+                                 item.copy(
+                                     category = if (item.roomNumber.isNotBlank()) {
+                                         val firstRoom = item.roomNumber.split(",").firstOrNull { it.isNotBlank() } ?: ""
+                                         if (firstRoom.isNotBlank()) getRoomCategory(firstRoom) else item.category
+                                     } else item.category,
+                                     amount = ratesPerNight.sum(),
+                                     nights = itemNights,
+                                     rates = ratesPerNight
+                                 )
+                             }
 
-                            val finalBillAmount = if (platform == "Direct" && isBillOn) {
-                                val customBill = billAmountStr.toDoubleOrNull()
-                                if (customBill == null || customBill <= 0.0) {
-                                    customBillError = "Please enter a valid custom bill amount."
-                                    errorMessage = "Please enter a valid custom bill amount."
-                                    showError = true
-                                    scrollToField("customBill")
-                                    return@Button
-                                }
-                                customBill
-                            } else {
-                                calculatedSum
-                            }
+                             val updatedItems = roomBookingItems + dormBookingItems
+                             val calculatedSum = updatedItems.sumOf { it.amount }
 
-                            val discountVal = if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0
-                            val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+                             val finalBillAmount = if (platform == "Direct" && isBillOn) {
+                                 val customBill = billAmountStr.toDoubleOrNull()
+                                 if (customBill == null || customBill <= 0.0) {
+                                     customBillError = "Please enter a valid custom bill amount."
+                                     errorMessage = "Please enter a valid custom bill amount."
+                                     showError = true
+                                     scrollToField("customBill")
+                                     return@Button
+                                 }
+                                 customBill
+                             } else if (platform != "Direct") {
+                                 if (userPayable <= 0.0) {
+                                     customBillError = "Please enter a valid payable rate."
+                                     errorMessage = "Please enter a valid payable rate."
+                                     showError = true
+                                     scrollToField("customBill")
+                                     return@Button
+                                 }
+                                 userPayable
+                             } else {
+                                 calculatedSum
+                             }
 
-                            val commissionVal = if (platform != "Direct") {
-                                val commBase = (finalBillAmount - discountVal).coerceAtLeast(0.0)
-                                com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase).totalDeductions
-                            } else {
-                                0.0
-                            }
+                             val discountVal = if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0
+                             val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+
+                             val commissionVal = 0.0
 
                             // Create/Update Booking
                             val finalGuestName = if (platform == "Direct" && !isBillOn && guestName.trim().isEmpty()) "Direct Guest" else guestName.trim()

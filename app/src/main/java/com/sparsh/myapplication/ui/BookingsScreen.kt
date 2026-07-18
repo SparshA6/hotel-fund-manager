@@ -511,6 +511,7 @@ fun getPlatformColorsForUnassigned(platform: String): Pair<Color, Color> {
         "Booking.com" -> Pair(Color(0xFFE3F2FD), Color(0xFF0D47A1))
         "Agoda" -> Pair(Color(0xFFF3E5F5), Color(0xFF4A148C))
         "Goibibo" -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))
+        "Yatra" -> Pair(Color(0xFFFCE4EC), Color(0xFF880E4F)) // Light Rose / Crimson
         "Cleartrip" -> Pair(Color(0xFFFFFDE7), Color(0xFFF57F17))
         else -> Pair(Color(0xFFECEFF1), Color(0xFF263238))
     }
@@ -730,7 +731,7 @@ fun AddUnassignedBookingDialog(
                     Column {
                         Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(4.dp))
-                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
+                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
                         platformsList.chunked(3).forEach { rowPlatforms ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

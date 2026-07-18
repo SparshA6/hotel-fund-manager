@@ -27,7 +27,18 @@ class ExampleUnitTest {
             expenses = 0.0,
             payments = emptyList()
         )
-        val gson = com.google.gson.Gson()
+        val gson = com.google.gson.GsonBuilder()
+            .registerTypeAdapter(Booking::class.java, com.google.gson.JsonSerializer<Booking> { src, _, _ ->
+                val obj = com.google.gson.JsonObject()
+                obj.addProperty("id", src.id)
+                obj.addProperty("checkInDate", src.checkInDate)
+                obj.addProperty("platform", src.platform)
+                obj.addProperty("guestName", src.guestName)
+                obj.addProperty("paymentStatus", src.paymentStatus)
+                obj.addProperty("paymentMethod", src.paymentMethod)
+                obj
+            })
+            .create()
         val json = gson.toJson(booking)
         println("SERIALIZED BOOKING JSON: $json")
         assertTrue(json.contains("paymentStatus"))

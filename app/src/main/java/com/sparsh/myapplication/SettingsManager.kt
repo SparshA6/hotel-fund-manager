@@ -17,20 +17,58 @@ data class DeductionBreakdown(
 object SettingsManager {
     private const val PREFS_NAME = "commission_settings"
 
+    private var cachedTaxRate: Float? = null
+    private var cachedTdsRate: Float? = null
+    private var cachedTcsRate: Float? = null
+    private val cachedCommissionRates = mutableMapOf<String, Float>()
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    fun getTaxRate(context: Context): Float = getPrefs(context).getFloat("tax_rate", 5.0f)
-    fun setTaxRate(context: Context, value: Float) = getPrefs(context).edit().putFloat("tax_rate", value).apply()
+    fun getTaxRate(context: Context): Float {
+        val cached = cachedTaxRate
+        if (cached != null) return cached
+        val value = getPrefs(context).getFloat("tax_rate", 5.0f)
+        cachedTaxRate = value
+        return value
+    }
 
-    fun getTdsRate(context: Context): Float = getPrefs(context).getFloat("tds_rate", 0.5f)
-    fun setTdsRate(context: Context, value: Float) = getPrefs(context).edit().putFloat("tds_rate", value).apply()
+    fun setTaxRate(context: Context, value: Float) {
+        cachedTaxRate = value
+        getPrefs(context).edit().putFloat("tax_rate", value).apply()
+    }
 
-    fun getTcsRate(context: Context): Float = getPrefs(context).getFloat("tcs_rate", 0.1f)
-    fun setTcsRate(context: Context, value: Float) = getPrefs(context).edit().putFloat("tcs_rate", value).apply()
+    fun getTdsRate(context: Context): Float {
+        val cached = cachedTdsRate
+        if (cached != null) return cached
+        val value = getPrefs(context).getFloat("tds_rate", 0.5f)
+        cachedTdsRate = value
+        return value
+    }
+
+    fun setTdsRate(context: Context, value: Float) {
+        cachedTdsRate = value
+        getPrefs(context).edit().putFloat("tds_rate", value).apply()
+    }
+
+    fun getTcsRate(context: Context): Float {
+        val cached = cachedTcsRate
+        if (cached != null) return cached
+        val value = getPrefs(context).getFloat("tcs_rate", 0.1f)
+        cachedTcsRate = value
+        return value
+    }
+
+    fun setTcsRate(context: Context, value: Float) {
+        cachedTcsRate = value
+        getPrefs(context).edit().putFloat("tcs_rate", value).apply()
+    }
 
     fun getCommissionRate(context: Context, platform: String): Float {
+        val cached = cachedCommissionRates[platform]
+        if (cached != null) return cached
+        
         val key = "comm_$platform"
         val defaultVal = when (platform) {
             "MMT" -> 20.0f
@@ -40,10 +78,13 @@ object SettingsManager {
             "Cleartrip" -> 12.0f
             else -> 0.0f
         }
-        return getPrefs(context).getFloat(key, defaultVal)
+        val value = getPrefs(context).getFloat(key, defaultVal)
+        cachedCommissionRates[platform] = value
+        return value
     }
 
     fun setCommissionRate(context: Context, platform: String, value: Float) {
+        cachedCommissionRates[platform] = value
         val key = "comm_$platform"
         getPrefs(context).edit().putFloat(key, value).apply()
     }

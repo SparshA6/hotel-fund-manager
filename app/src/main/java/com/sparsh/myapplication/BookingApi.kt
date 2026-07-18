@@ -51,6 +51,12 @@ interface BookingApi {
         @Path("imageId") imageId: String
     ): Booking
 
+    @GET("api/portal-settings")
+    suspend fun getPortalSettings(): List<PortalSettings>
+
+    @POST("api/portal-settings")
+    suspend fun savePortalSettings(@Body settings: PortalSettings): PortalSettings
+
     @GET("api/backups")
     suspend fun getBackups(): List<BackupInfo>
 

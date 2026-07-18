@@ -78,6 +78,29 @@ function writeLocalBackups(backups) {
   }
 }
 
+const PORTAL_SETTINGS_FILE_PATH = path.join(__dirname, 'portal_settings.json');
+
+function readLocalPortalSettings() {
+  try {
+    if (!fs.existsSync(PORTAL_SETTINGS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(PORTAL_SETTINGS_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading local portal settings file:', error);
+    return [];
+  }
+}
+
+function writeLocalPortalSettings(settings) {
+  try {
+    fs.writeFileSync(PORTAL_SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local portal settings file:', error);
+  }
+}
+
 // Connect to MongoDB Atlas
 const maskedURI = MONGODB_URI.replace(/:([^:@]+)@/, ':***@');
 console.log('Attempting to connect to MongoDB URI:', maskedURI);
@@ -86,11 +109,13 @@ mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB successfully!');
     isUsingMongoDB = true;
+    seedPortalSettings();
   })
   .catch((err) => {
     console.warn('MongoDB connection failed. Falling back to local JSON file storage.');
     console.warn('Error details:', err.message);
     isUsingMongoDB = false;
+    seedPortalSettings();
   });
 
 // MongoDB Mongoose Schemas
@@ -163,7 +188,95 @@ const BackupSchema = new mongoose.Schema({
 
 const Backup = mongoose.model('Backup', BackupSchema);
 
+const PortalSettingsSchema = new mongoose.Schema({
+  platform: { type: String, required: true, unique: true },
+  commissionRate: { type: Number, default: 0.0 },
+  propertyGstRate: { type: Number, default: 0.0 },
+  gstOnCommissionRate: { type: Number, default: 0.0 },
+  tdsRate: { type: Number, default: 0.0 },
+  tcsRate: { type: Number, default: 0.0 },
+  paymentProcessingFeeRate: { type: Number, default: 0.0 },
+  serviceCharge: { type: Number, default: 0.0 }
+});
+
+const PortalSettings = mongoose.model('PortalSettings', PortalSettingsSchema);
+
+const DEFAULT_PORTAL_SETTINGS = [
+  { platform: "MMT", commissionRate: 20.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
+  { platform: "Goibibo", commissionRate: 15.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
+  { platform: "Yatra", commissionRate: 15.0, propertyGstRate: 0.0, gstOnCommissionRate: 0.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
+  { platform: "Booking.com", commissionRate: 15.0, propertyGstRate: 12.0, gstOnCommissionRate: 0.0, tdsRate: 0.0, tcsRate: 0.0, paymentProcessingFeeRate: 2.0, serviceCharge: 0.0 },
+  { platform: "Agoda", commissionRate: 15.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
+  { platform: "Cleartrip", commissionRate: 12.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 }
+];
+
+async function seedPortalSettings() {
+  try {
+    if (isUsingMongoDB) {
+      const count = await PortalSettings.countDocuments();
+      if (count === 0) {
+        await PortalSettings.insertMany(DEFAULT_PORTAL_SETTINGS);
+        console.log("Portal settings seeded in MongoDB successfully.");
+      }
+    } else {
+      const settings = readLocalPortalSettings();
+      if (settings.length === 0) {
+        writeLocalPortalSettings(DEFAULT_PORTAL_SETTINGS);
+        console.log("Portal settings seeded in local JSON file successfully.");
+      }
+    }
+  } catch (error) {
+    console.error("Error seeding portal settings:", error);
+  }
+}
+
 // REST API Endpoints
+
+// 0. Portal settings endpoints
+app.get('/api/portal-settings', async (req, res) => {
+  try {
+    if (isUsingMongoDB) {
+      const settings = await PortalSettings.find();
+      res.json(settings);
+    } else {
+      const settings = readLocalPortalSettings();
+      res.json(settings);
+    }
+  } catch (error) {
+    console.error('Error fetching portal settings:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/portal-settings', async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.platform) {
+      return res.status(400).json({ error: 'Missing required field: platform' });
+    }
+    if (isUsingMongoDB) {
+      const updated = await PortalSettings.findOneAndUpdate(
+        { platform: data.platform },
+        data,
+        { new: true, upsert: true, runValidators: true }
+      );
+      res.json(updated);
+    } else {
+      const settings = readLocalPortalSettings();
+      const index = settings.findIndex(s => s.platform === data.platform);
+      if (index !== -1) {
+        settings[index] = data;
+      } else {
+        settings.push(data);
+      }
+      writeLocalPortalSettings(settings);
+      res.json(data);
+    }
+  } catch (error) {
+    console.error('Error saving portal settings:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 // 1. Get all bookings
 app.get('/api/bookings', async (req, res) => {

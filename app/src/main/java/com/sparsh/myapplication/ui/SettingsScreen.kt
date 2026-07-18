@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.sparsh.myapplication.SettingsManager
 import com.sparsh.myapplication.BackupInfo
 import com.sparsh.myapplication.Booking
+import com.sparsh.myapplication.PortalSettings
 import com.sparsh.myapplication.BookingRepository
 import kotlinx.coroutines.launch
 
@@ -42,10 +43,6 @@ fun SettingsScreen(
     var pinText by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
 
-    var taxRateStr by remember { mutableStateOf(SettingsManager.getTaxRate(context).toString()) }
-    var tdsRateStr by remember { mutableStateOf(SettingsManager.getTdsRate(context).toString()) }
-    var tcsRateStr by remember { mutableStateOf(SettingsManager.getTcsRate(context).toString()) }
-
     var backups by remember { mutableStateOf(listOf<BackupInfo>()) }
     var isLoadingBackups by remember { mutableStateOf(false) }
     var isOperating by remember { mutableStateOf(false) }
@@ -54,25 +51,41 @@ fun SettingsScreen(
     var showRestoreConfirmDialog by remember { mutableStateOf<BackupInfo?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf<BackupInfo?>(null) }
 
+    val platforms = listOf("MMT", "Goibibo", "Yatra", "Booking.com", "Agoda", "Cleartrip")
+    var selectedPlatform by remember { mutableStateOf("MMT") }
+    var portalSettingsList by remember { mutableStateOf(bookingRepository.getLocalPortalSettings()) }
+
     LaunchedEffect(Unit) {
         isLoadingBackups = true
         try {
             backups = bookingRepository.getBackups()
+            val remoteSettings = bookingRepository.getPortalSettings()
+            portalSettingsList = remoteSettings
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "Failed to load backups: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Failed to load backups or settings: ${e.message}", Toast.LENGTH_LONG).show()
         } finally {
             isLoadingBackups = false
         }
     }
 
-    val platforms = listOf("MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
-    val commissionRates = remember {
-        mutableStateMapOf<String, String>().apply {
-            platforms.forEach { platform ->
-                put(platform, SettingsManager.getCommissionRate(context, platform).toString())
-            }
-        }
+    var commissionRateStr by remember { mutableStateOf("") }
+    var propertyGstRateStr by remember { mutableStateOf("") }
+    var gstOnCommissionRateStr by remember { mutableStateOf("") }
+    var tdsRateStr by remember { mutableStateOf("") }
+    var tcsRateStr by remember { mutableStateOf("") }
+    var paymentProcessingFeeRateStr by remember { mutableStateOf("") }
+    var serviceChargeStr by remember { mutableStateOf("") }
+
+    LaunchedEffect(selectedPlatform, portalSettingsList) {
+        val settings = portalSettingsList.find { it.platform.equals(selectedPlatform, ignoreCase = true) } ?: PortalSettings(selectedPlatform)
+        commissionRateStr = if (settings.commissionRate == 0f) "" else settings.commissionRate.toString()
+        propertyGstRateStr = if (settings.propertyGstRate == 0f) "" else settings.propertyGstRate.toString()
+        gstOnCommissionRateStr = if (settings.gstOnCommissionRate == 0f) "" else settings.gstOnCommissionRate.toString()
+        tdsRateStr = if (settings.tdsRate == 0f) "" else settings.tdsRate.toString()
+        tcsRateStr = if (settings.tcsRate == 0f) "" else settings.tcsRate.toString()
+        paymentProcessingFeeRateStr = if (settings.paymentProcessingFeeRate == 0f) "" else settings.paymentProcessingFeeRate.toString()
+        serviceChargeStr = if (settings.serviceCharge == 0f) "" else settings.serviceCharge.toString()
     }
 
     var showSaveSuccessAlert by remember { mutableStateOf(false) }
@@ -241,91 +254,129 @@ fun SettingsScreen(
             }
 
             if (!isStaffMode) {
-                // General Rates Card
+                // Portal Selection & Settings Card
                 item {
-                    Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Tax & Government Deductions",
+                            text = "Portal Settings Configuration",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.primary
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
+                        
+                        ScrollableTabRow(
+                            selectedTabIndex = platforms.indexOf(selectedPlatform),
+                            edgePadding = 0.dp,
+                            containerColor = Color.Transparent,
+                            divider = {}
+                        ) {
+                            platforms.forEach { p ->
+                                Tab(
+                                    selected = selectedPlatform == p,
+                                    onClick = { selectedPlatform = p },
+                                    text = { Text(p, fontWeight = FontWeight.Bold) }
+                                )
+                            }
+                        }
 
-                        OutlinedTextField(
-                            value = taxRateStr,
-                            onValueChange = { taxRateStr = it },
-                            label = { Text("Online Portal Tax Rate") },
-                            suffix = { Text("%") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "$selectedPlatform Settings",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
 
-                        OutlinedTextField(
-                            value = tdsRateStr,
-                            onValueChange = { tdsRateStr = it },
-                            label = { Text("TDS Rate") },
-                            suffix = { Text("%") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                                OutlinedTextField(
+                                    value = commissionRateStr,
+                                    onValueChange = { commissionRateStr = it },
+                                    label = { Text("Commission Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        OutlinedTextField(
-                            value = tcsRateStr,
-                            onValueChange = { tcsRateStr = it },
-                            label = { Text("TCS Rate") },
-                            suffix = { Text("%") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
+                                OutlinedTextField(
+                                    value = propertyGstRateStr,
+                                    onValueChange = { propertyGstRateStr = it },
+                                    label = { Text("Property GST Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-            // Platform Commission Rates Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Platform Commission Rates",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                                OutlinedTextField(
+                                    value = gstOnCommissionRateStr,
+                                    onValueChange = { gstOnCommissionRateStr = it },
+                                    label = { Text("GST on Commission Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                        platforms.forEach { platform ->
-                            OutlinedTextField(
-                                value = commissionRates[platform] ?: "",
-                                onValueChange = { commissionRates[platform] = it },
-                                label = { Text("$platform Commission") },
-                                suffix = { Text("%") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                                OutlinedTextField(
+                                    value = tdsRateStr,
+                                    onValueChange = { tdsRateStr = it },
+                                    label = { Text("TDS Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = tcsRateStr,
+                                    onValueChange = { tcsRateStr = it },
+                                    label = { Text("TCS Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = paymentProcessingFeeRateStr,
+                                    onValueChange = { paymentProcessingFeeRateStr = it },
+                                    label = { Text("Payment Processing Fee Rate") },
+                                    suffix = { Text("%") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = serviceChargeStr,
+                                    onValueChange = { serviceChargeStr = it },
+                                    label = { Text("Service Charge") },
+                                    prefix = { Text("₹") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -478,29 +529,33 @@ fun SettingsScreen(
             item {
                 Button(
                     onClick = {
-                        val tax = taxRateStr.toFloatOrNull() ?: 5.0f
-                        val tds = tdsRateStr.toFloatOrNull() ?: 0.5f
-                        val tcs = tcsRateStr.toFloatOrNull() ?: 0.1f
-
-                        SettingsManager.setTaxRate(context, tax)
-                        SettingsManager.setTdsRate(context, tds)
-                        SettingsManager.setTcsRate(context, tcs)
-
-                        platforms.forEach { platform ->
-                            val comm = commissionRates[platform]?.toFloatOrNull() ?: 0.0f
-                            SettingsManager.setCommissionRate(context, platform, comm)
+                        val updated = PortalSettings(
+                            platform = selectedPlatform,
+                            commissionRate = commissionRateStr.toFloatOrNull() ?: 0f,
+                            propertyGstRate = propertyGstRateStr.toFloatOrNull() ?: 0f,
+                            gstOnCommissionRate = gstOnCommissionRateStr.toFloatOrNull() ?: 0f,
+                            tdsRate = tdsRateStr.toFloatOrNull() ?: 0f,
+                            tcsRate = tcsRateStr.toFloatOrNull() ?: 0f,
+                            paymentProcessingFeeRate = paymentProcessingFeeRateStr.toFloatOrNull() ?: 0f,
+                            serviceCharge = serviceChargeStr.toFloatOrNull() ?: 0f
+                        )
+                        coroutineScope.launch {
+                            isOperating = true
+                            operationMessage = "Saving portal settings..."
+                            try {
+                                bookingRepository.savePortalSettings(updated)
+                                val list = bookingRepository.getPortalSettings()
+                                portalSettingsList = list
+                                showSaveSuccessAlert = true
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                isOperating = false
+                            }
                         }
-
-                        // Re-sync UI text fields with saved values
-                        taxRateStr = SettingsManager.getTaxRate(context).toString()
-                        tdsRateStr = SettingsManager.getTdsRate(context).toString()
-                        tcsRateStr = SettingsManager.getTcsRate(context).toString()
-                        platforms.forEach { p ->
-                            commissionRates[p] = SettingsManager.getCommissionRate(context, p).toString()
-                        }
-
-                        showSaveSuccessAlert = true
                     },
+                    enabled = !isOperating,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
@@ -508,7 +563,6 @@ fun SettingsScreen(
                 ) {
                     Text("Save Settings", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-            }
             }
         }
     }

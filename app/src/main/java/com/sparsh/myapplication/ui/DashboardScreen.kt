@@ -181,7 +181,7 @@ fun DashboardScreen(
     }
 
     // Platform distributions based on period allocations
-    val platforms = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Cleartrip")
+    val platforms = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
     val platformCounts = remember(activeBookings) {
         platforms.associateWith { platform ->
             activeBookings.count { it.platform.equals(platform, ignoreCase = true) }
@@ -490,6 +490,7 @@ fun DashboardScreen(
                                     "Booking.com" -> Color(0xFF2563EB) // Royal Blue
                                     "Agoda" -> Color(0xFF8B5CF6) // Purple
                                     "Goibibo" -> Color(0xFFEF4444) // Red
+                                    "Yatra" -> Color(0xFFE11D48) // Crimson Red
                                     "Cleartrip" -> Color(0xFFF59E0B) // Amber
                                     else -> MaterialTheme.colorScheme.secondary
                                 }
