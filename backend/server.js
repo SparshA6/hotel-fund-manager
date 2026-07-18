@@ -1255,10 +1255,23 @@ app.post('/api/statements/match', async (req, res) => {
       bookings = readLocalBookings();
     }
 
+    // Collect all payment IDs already used by matched statements
+    // so the same payment cannot be matched to multiple statements
+    let allStatements = [];
+    if (isUsingMongoDB) {
+      allStatements = await StatementRecord.find({ isMatched: true });
+    } else {
+      allStatements = readLocalStatements().filter(s => s.isMatched);
+    }
+    const alreadyMatchedPaymentIds = new Set(allStatements.map(s => s.matchedPaymentId).filter(Boolean));
+
     const paymentsPool = [];
     for (const b of bookings) {
       if (b.payments && Array.isArray(b.payments)) {
         for (const p of b.payments) {
+          // Skip payments already matched to a statement
+          if (alreadyMatchedPaymentIds.has(p.id)) continue;
+
           const methodStr = String(p.method || '').toLowerCase();
           if (methodStr.includes('gpay') || methodStr.includes('g-pay') || methodStr.includes('g pay') || methodStr.includes('hotel acc')) {
             // Use IST (UTC+5:30) for date extraction to match statement dates from Excel
@@ -1277,6 +1290,7 @@ app.post('/api/statements/match', async (req, res) => {
         }
       }
     }
+
 
     const updatedStatements = isUsingMongoDB ? [] : [...readLocalStatements()];
     
