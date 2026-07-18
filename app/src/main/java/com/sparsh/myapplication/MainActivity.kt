@@ -325,6 +325,15 @@ class MainActivity : ComponentActivity() {
                             com.sparsh.myapplication.ui.BankStatementScreen(
                                 bookingRepository = bookingRepository,
                                 onBack = { showBankStatementScreen = false },
+                                onSelectBookingId = { bookingId ->
+                                    val matchedB = bookings.value.find { it.id == bookingId }
+                                    if (matchedB != null) {
+                                        bookingToEdit = matchedB
+                                        showBankStatementScreen = false
+                                    } else {
+                                        android.widget.Toast.makeText(this@MainActivity, "Booking not found", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

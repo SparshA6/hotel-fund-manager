@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,6 +38,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 fun BankStatementScreen(
     bookingRepository: BookingRepository,
     onBack: () -> Unit,
+    onSelectBookingId: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -356,7 +358,12 @@ fun BankStatementScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(activeList, key = { it.id }) { record ->
-                                StatementItem(record)
+                                StatementItem(
+                                    record = record,
+                                    onClick = if (record.isMatched && record.matchedBookingId.isNotEmpty()) {
+                                        { onSelectBookingId(record.matchedBookingId) }
+                                    } else null
+                                )
                             }
                         }
                     }
@@ -415,9 +422,16 @@ fun BankStatementScreen(
 }
 
 @Composable
-fun StatementItem(record: StatementRecord) {
+fun StatementItem(
+    record: StatementRecord,
+    onClick: (() -> Unit)? = null
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .let {
+                if (onClick != null) it.clickable(onClick = onClick) else it
+            },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
