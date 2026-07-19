@@ -288,6 +288,10 @@ class BookingRepository(context: Context) {
         api.getStatements()
     }
 
+    suspend fun getUploadedFiles(): List<UploadedFileInfo> = withContext(Dispatchers.IO) {
+        api.getUploadedFiles()
+    }
+
     suspend fun matchStatements(): List<StatementRecord> = withContext(Dispatchers.IO) {
         api.matchStatements()
     }

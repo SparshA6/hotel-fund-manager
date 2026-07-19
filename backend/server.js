@@ -104,6 +104,7 @@ function writeLocalPortalSettings(settings) {
 }
 
 const STATEMENTS_FILE_PATH = path.join(__dirname, 'statements.json');
+const UPLOADED_FILES_FILE_PATH = path.join(__dirname, 'uploaded_files.json');
 
 function readLocalStatements() {
   try {
@@ -123,6 +124,27 @@ function writeLocalStatements(statements) {
     fs.writeFileSync(STATEMENTS_FILE_PATH, JSON.stringify(statements, null, 2), 'utf8');
   } catch (error) {
     console.error('Error writing local statements file:', error);
+  }
+}
+
+function readLocalUploadedFiles() {
+  try {
+    if (!fs.existsSync(UPLOADED_FILES_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(UPLOADED_FILES_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading local uploaded files file:', error);
+    return [];
+  }
+}
+
+function writeLocalUploadedFiles(files) {
+  try {
+    fs.writeFileSync(UPLOADED_FILES_FILE_PATH, JSON.stringify(files, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local uploaded files file:', error);
   }
 }
 
@@ -292,6 +314,16 @@ const StatementRecordSchema = new mongoose.Schema({
 });
 
 const StatementRecord = mongoose.model('StatementRecord', StatementRecordSchema);
+
+const UploadedFileSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  filename: { type: String, required: true },
+  originalName: { type: String, required: true },
+  uploadDate: { type: String, required: true },
+  filePath: { type: String, required: true }
+});
+
+const UploadedFile = mongoose.model('UploadedFile', UploadedFileSchema);
 
 const DEFAULT_PORTAL_SETTINGS = [
   { platform: "MMT", commissionRate: 20.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
@@ -1178,25 +1210,77 @@ app.post('/api/statements/upload', upload.single('statement'), async (req, res) 
       return res.status(400).json({ error: 'No statement file uploaded' });
     }
 
-    const parsedRecords = parseExcelStatement(req.file.buffer);
-    
-    // Save to DB or file fallback
-    const statementsToSave = parsedRecords.map(r => ({
+    // Save physical file on disk
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const originalName = req.file.originalname;
+    const filename = `${Date.now()}-${originalName}`;
+    const filePath = path.join(uploadsDir, filename);
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    // Save UploadedFile record
+    const fileRecord = {
       id: require('crypto').randomUUID(),
-      date: r.date,
-      description: r.description,
-      amount: r.amount,
-      isMatched: false,
-      matchedBookingId: '',
-      matchedPaymentId: ''
-    }));
+      filename: filename,
+      originalName: originalName,
+      uploadDate: new Date().toISOString(),
+      filePath: filePath
+    };
 
     if (isUsingMongoDB) {
-      await StatementRecord.insertMany(statementsToSave);
+      await UploadedFile.create(fileRecord);
     } else {
-      const existing = readLocalStatements();
-      const updated = [...existing, ...statementsToSave];
-      writeLocalStatements(updated);
+      const files = readLocalUploadedFiles();
+      files.push(fileRecord);
+      writeLocalUploadedFiles(files);
+    }
+
+    // Parse records from the uploaded file buffer
+    const parsedRecords = parseExcelStatement(req.file.buffer);
+    
+    // Deduplication check
+    const existing = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    const getNormalizedDesc = (desc) => {
+      return String(desc || '').replace(/\s*\[Matched:.*\]$/, '').trim().toLowerCase();
+    };
+
+    const statementsToSave = [];
+    for (const r of parsedRecords) {
+      const isDuplicate = existing.some(ext =>
+        ext.date === r.date &&
+        Math.abs(ext.amount - r.amount) < 0.01 &&
+        getNormalizedDesc(ext.description) === getNormalizedDesc(r.description)
+      );
+
+      const isDuplicateInBatch = statementsToSave.some(batchItem =>
+        batchItem.date === r.date &&
+        Math.abs(batchItem.amount - r.amount) < 0.01 &&
+        getNormalizedDesc(batchItem.description) === getNormalizedDesc(r.description)
+      );
+
+      if (!isDuplicate && !isDuplicateInBatch) {
+        statementsToSave.push({
+          id: require('crypto').randomUUID(),
+          date: r.date,
+          description: r.description,
+          amount: r.amount,
+          isMatched: false,
+          matchedBookingId: '',
+          matchedPaymentId: ''
+        });
+      }
+    }
+
+    if (statementsToSave.length > 0) {
+      if (isUsingMongoDB) {
+        await StatementRecord.insertMany(statementsToSave);
+      } else {
+        const existingList = readLocalStatements();
+        const updated = [...existingList, ...statementsToSave];
+        writeLocalStatements(updated);
+      }
     }
 
     const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
@@ -1218,13 +1302,38 @@ app.get('/api/statements', async (req, res) => {
   }
 });
 
+// Get uploaded statement files list Endpoint
+app.get('/api/statements/files', async (req, res) => {
+  try {
+    const files = isUsingMongoDB ? await UploadedFile.find() : readLocalUploadedFiles();
+    res.json(files);
+  } catch (error) {
+    console.error('Error fetching uploaded files:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Clear statements Endpoint
 app.delete('/api/statements', async (req, res) => {
   try {
+    // Delete files from uploads directory
+    const files = isUsingMongoDB ? await UploadedFile.find() : readLocalUploadedFiles();
+    for (const f of files) {
+      if (fs.existsSync(f.filePath)) {
+        try {
+          fs.unlinkSync(f.filePath);
+        } catch (e) {
+          console.error('Error deleting file:', f.filePath, e);
+        }
+      }
+    }
+
     if (isUsingMongoDB) {
       await StatementRecord.deleteMany();
+      await UploadedFile.deleteMany();
     } else {
       writeLocalStatements([]);
+      writeLocalUploadedFiles([]);
     }
     res.sendStatus(204);
   } catch (error) {

@@ -76,6 +76,9 @@ interface BookingApi {
     @GET("api/statements")
     suspend fun getStatements(): List<StatementRecord>
 
+    @GET("api/statements/files")
+    suspend fun getUploadedFiles(): List<UploadedFileInfo>
+
     @POST("api/statements/match")
     suspend fun matchStatements(): List<StatementRecord>
 
