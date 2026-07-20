@@ -126,9 +126,10 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            bottomBar = {
                         NavigationBar {
                             NavigationBarItem(
                                 selected = currentTab == 0,
@@ -317,25 +318,26 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
+                    }
 
-                        if (showBankStatementScreen) {
-                            androidx.activity.compose.BackHandler(enabled = true) {
-                                showBankStatementScreen = false
-                            }
-                            com.sparsh.myapplication.ui.BankStatementScreen(
-                                bookingRepository = bookingRepository,
-                                onBack = { showBankStatementScreen = false },
-                                onSelectBookingId = { bookingId ->
-                                    val matchedB = bookings.value.find { it.id == bookingId }
-                                    if (matchedB != null) {
-                                        bookingToEdit = matchedB
-                                    } else {
-                                        android.widget.Toast.makeText(this@MainActivity, "Booking not found", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                    if (showBankStatementScreen) {
+                        androidx.activity.compose.BackHandler(enabled = true) {
+                            showBankStatementScreen = false
                         }
+                        com.sparsh.myapplication.ui.BankStatementScreen(
+                            bookingRepository = bookingRepository,
+                            onBack = { showBankStatementScreen = false },
+                            onSelectBookingId = { bookingId ->
+                                val matchedB = bookings.value.find { it.id == bookingId }
+                                if (matchedB != null) {
+                                    bookingToEdit = matchedB
+                                } else {
+                                    android.widget.Toast.makeText(this@MainActivity, "Booking not found", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                         if (bookingToEdit != null) {
                             if (bookingToEdit!!.isAssigned) {
