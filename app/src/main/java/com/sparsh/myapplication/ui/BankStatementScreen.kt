@@ -172,20 +172,22 @@ fun BankStatementScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Summary and Stats Card
-                val latestStatementDate = remember(statementList) {
-                    if (statementList.isEmpty()) null
-                    else statementList.map { it.date }.maxOrNull()
-                }
+                item {
+                    val latestStatementDate = remember(statementList) {
+                        if (statementList.isEmpty()) null
+                        else statementList.map { it.date }.maxOrNull()
+                    }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -441,8 +443,9 @@ fun BankStatementScreen(
 
                 // Filtration Card
                 if (statementList.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
@@ -616,123 +619,122 @@ fun BankStatementScreen(
 
                 if (statementList.isNotEmpty()) {
                     // Tab Selector
-                    TabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            text = { 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Unmatched", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                    ) {
-                                        Text("$totalUnmatchedCount")
+                    item {
+                        TabRow(
+                            selectedTabIndex = selectedTab,
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Tab(
+                                selected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                text = { 
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Unmatched", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        ) {
+                                            Text("$totalUnmatchedCount")
+                                        }
                                     }
                                 }
-                            }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            text = { 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Matched", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    ) {
-                                        Text("$totalMatchedCount")
+                            )
+                            Tab(
+                                selected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                text = { 
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Matched", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        ) {
+                                            Text("$totalMatchedCount")
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
 
                     // Statements Table/List
                     val activeList = if (selectedTab == 0) unmatchedList else matchedList
                     
                     if (activeList.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = if (selectedTab == 0) Icons.Default.CheckCircle else Icons.Default.Info,
-                                    contentDescription = "Empty",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Text(
-                                    text = if (selectedTab == 0) "All statements reconciled!" else "No reconciled statements yet",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (selectedTab == 0) Icons.Default.CheckCircle else Icons.Default.Info,
+                                        contentDescription = "Empty",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Text(
+                                        text = if (selectedTab == 0) "All statements reconciled!" else "No reconciled statements yet",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
                             }
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(activeList, key = { it.id }) { record ->
-                                StatementItem(
-                                    record = record,
-                                    onClick = if (record.isMatched && record.matchedBookingId.isNotEmpty()) {
-                                        { onSelectBookingId(record.matchedBookingId) }
-                                    } else null
-                                )
-                            }
+                        items(activeList, key = { it.id }) { record ->
+                            StatementItem(
+                                record = record,
+                                onClick = if (record.isMatched && record.matchedBookingId.isNotEmpty()) {
+                                    { onSelectBookingId(record.matchedBookingId) }
+                                } else null
+                            )
                         }
                     }
                 } else {
                     // Upload Empty State
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.List,
-                                contentDescription = "Spreadsheet Icon",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Text(
-                                text = "Excel statement parser handles most GPay statement layouts",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
-                            Button(
-                                onClick = { filePickerLauncher.launch("*/*") },
-                                shape = RoundedCornerShape(12.dp)
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Upload Icon"
+                                    imageVector = Icons.Default.List,
+                                    contentDescription = "Spreadsheet Icon",
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(64.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Select Bank Statement file")
+                                Text(
+                                    text = "Excel statement parser handles most GPay statement layouts",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                                Button(
+                                    onClick = { filePickerLauncher.launch("*/*") },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Upload Icon"
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Select Bank Statement file")
+                                }
                             }
                         }
                     }
@@ -752,6 +754,7 @@ fun BankStatementScreen(
             }
         }
     }
+}
 }
 
 @Composable
