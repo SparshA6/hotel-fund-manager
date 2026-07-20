@@ -146,7 +146,7 @@ fun BankStatementScreen(
 
                     if (bytes != null) {
                         val requestFile = bytes.toRequestBody("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".toMediaTypeOrNull())
-                        val body = MultipartBody.Part.createFormData("file", fileName, requestFile)
+                        val body = MultipartBody.Part.createFormData("statement", fileName, requestFile)
 
                         val records = bookingRepository.uploadStatement(body)
                         statementList = records
