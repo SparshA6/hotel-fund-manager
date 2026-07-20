@@ -170,22 +170,20 @@ fun BankStatementScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Bank Reconciliation",
+                            text = "Reconciliation",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         if (statementList.isNotEmpty()) {
                             val matchProgressPercent = ((totalMatchedCount.toFloat() / statementList.size.toFloat()) * 100).toInt()
                             Text(
-                                text = "${statementList.size} entries • $totalMatchedCount matched ($matchProgressPercent%)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Text(
-                                text = "Upload GPay statement to reconcile",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                text = "${statementList.size} entries · $totalMatchedCount matched ($matchProgressPercent%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
