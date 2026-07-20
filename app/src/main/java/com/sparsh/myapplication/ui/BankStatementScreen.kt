@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,7 +35,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BankStatementScreen(
     bookingRepository: BookingRepository,
@@ -49,6 +50,7 @@ fun BankStatementScreen(
     var uploadedFiles by remember { mutableStateOf<List<UploadedFileInfo>>(emptyList()) }
     var selectedTab by remember { mutableStateOf(0) } // 0: Unmatched, 1: Matched
     var isLoading by remember { mutableStateOf(false) }
+    var showOverviewDetails by remember { mutableStateOf(false) }
     
     // Load existing statements on startup
     LaunchedEffect(Unit) {
@@ -185,163 +187,185 @@ fun BankStatementScreen(
                         if (statementList.isEmpty()) null
                         else statementList.map { it.date }.maxOrNull()
                     }
+                    val matchProgress = if (statementList.isEmpty()) 0f else (matchedList.size.toFloat() / statementList.size.toFloat())
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column {
-                                Text(
-                                    text = "Statement Overview",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = if (statementList.isEmpty()) "No statement uploaded" else "${statementList.size} deposit transactions found",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                latestStatementDate?.let { date ->
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Uploaded till: $date",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                            
-                            if (statementList.isEmpty()) {
-                                Button(
-                                    onClick = { filePickerLauncher.launch("*/*") },
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Upload",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Upload Statement", fontSize = 13.sp)
-                                }
-                            } else {
-                                IconButton(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            isLoading = true
-                                            try {
-                                                bookingRepository.clearStatements()
-                                                statementList = emptyList()
-                                                uploadedFiles = emptyList()
-                                                Toast.makeText(context, "Statements cleared successfully", Toast.LENGTH_SHORT).show()
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Clear failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                            } finally {
-                                                isLoading = false
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .let {
+                                        if (statementList.isNotEmpty()) it.clickable { showOverviewDetails = !showOverviewDetails } else it
+                                    },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Statement Overview",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        if (statementList.isNotEmpty()) {
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            ) {
+                                                Text("${(matchProgress * 100).toInt()}% matched")
                                             }
                                         }
                                     }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Clear",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        }
-
-                        if (statementList.isNotEmpty()) {
-                            val matchProgress = if (statementList.isEmpty()) 0f else (matchedList.size.toFloat() / statementList.size.toFloat())
-                            
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
                                     Text(
-                                        text = "Reconciliation Progress",
+                                        text = if (statementList.isEmpty()) "No statement uploaded" else "${statementList.size} deposit transactions found",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
-                                    Text(
-                                        text = "${matchedList.size}/${statementList.size} matched (${(matchProgress * 100).toInt()}%)",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    latestStatementDate?.let { date ->
+                                        Text(
+                                            text = "Uploaded till: $date",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
-                                LinearProgressIndicator(
-                                    progress = { matchProgress },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            isLoading = true
-                                            try {
-                                                statementList = bookingRepository.matchStatements()
-                                                Toast.makeText(context, "Matching completed successfully!", Toast.LENGTH_SHORT).show()
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Match failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                            } finally {
-                                                isLoading = false
-                                            }
+                                
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (statementList.isEmpty()) {
+                                        Button(
+                                            onClick = { filePickerLauncher.launch("*/*") },
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Upload",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Upload Statement", fontSize = 13.sp)
                                         }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Reconcile",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Reconcile Payments", fontSize = 13.sp)
-                                }
-
-                                OutlinedButton(
-                                    onClick = { filePickerLauncher.launch("*/*") },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Upload New",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Upload New", fontSize = 13.sp)
+                                    } else {
+                                        IconButton(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    isLoading = true
+                                                    try {
+                                                        bookingRepository.clearStatements()
+                                                        statementList = emptyList()
+                                                        uploadedFiles = emptyList()
+                                                        Toast.makeText(context, "Statements cleared successfully", Toast.LENGTH_SHORT).show()
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Clear failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                                    } finally {
+                                                        isLoading = false
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Clear",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = if (showOverviewDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Toggle Overview Details",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
-                        }
+
+                            if (statementList.isNotEmpty() && showOverviewDetails) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Reconciliation Progress",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "${matchedList.size}/${statementList.size} matched (${(matchProgress * 100).toInt()}%)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { matchProgress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp)),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                isLoading = true
+                                                try {
+                                                    statementList = bookingRepository.matchStatements()
+                                                    Toast.makeText(context, "Matching completed successfully!", Toast.LENGTH_SHORT).show()
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "Match failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                                } finally {
+                                                    isLoading = false
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Reconcile",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Reconcile Payments", fontSize = 13.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { filePickerLauncher.launch("*/*") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Upload New",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Upload New", fontSize = 13.sp)
+                                    }
+                                }
 
                         // Collapsible Uploaded Files List
                         if (uploadedFiles.isNotEmpty()) {
@@ -440,6 +464,7 @@ fun BankStatementScreen(
                         }
                     }
                 }
+            }
 
                 // Filtration Card
                 if (statementList.isNotEmpty()) {
@@ -618,46 +643,51 @@ fun BankStatementScreen(
                 }
 
                 if (statementList.isNotEmpty()) {
-                    // Tab Selector
-                    item {
-                        TabRow(
-                            selectedTabIndex = selectedTab,
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.primary,
+                    // Tab Selector Sticky Header
+                    stickyHeader {
+                        Surface(
+                            color = MaterialTheme.colorScheme.background,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Tab(
-                                selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
-                                text = { 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Unmatched", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                        ) {
-                                            Text("$totalUnmatchedCount")
+                            TabRow(
+                                selectedTabIndex = selectedTab,
+                                containerColor = Color.Transparent,
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                Tab(
+                                    selected = selectedTab == 0,
+                                    onClick = { selectedTab = 0 },
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Unmatched", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                            ) {
+                                                Text("$totalUnmatchedCount")
+                                            }
                                         }
                                     }
-                                }
-                            )
-                            Tab(
-                                selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
-                                text = { 
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Matched", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                        ) {
-                                            Text("$totalMatchedCount")
+                                )
+                                Tab(
+                                    selected = selectedTab == 1,
+                                    onClick = { selectedTab = 1 },
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Matched", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            ) {
+                                                Text("$totalMatchedCount")
+                                            }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
 
