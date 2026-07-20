@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const fs = require('fs');
@@ -1120,15 +1120,17 @@ async function updateExcelFileWithMatchedRows(filePath) {
       matchedRecords = readLocalStatements().filter(s => s.isMatched);
     }
 
-    const matchedSet = new Set();
     const getNormalizedDesc = (desc) => {
-      return String(desc || '').replace(/\s*\[Matched:.*\]$/, '').trim().toLowerCase();
+      return String(desc || '').replace(/\s*\[Matched:.*\]/, '').trim().toLowerCase();
     };
 
+    const matchedSet = new Set();
     for (const r of matchedRecords) {
-      const key = `${r.date}|${r.amount.toFixed(2)}|${getNormalizedDesc(r.description)}`;
+      const key = r.date + '|' + r.amount.toFixed(2) + '|' + getNormalizedDesc(r.description);
       matchedSet.add(key);
+      console.log('[Highlight] Matched key: ' + key);
     }
+    console.log('[Highlight] Total matched keys: ' + matchedSet.size);
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
@@ -1138,103 +1140,75 @@ async function updateExcelFileWithMatchedRows(filePath) {
       let colIndices = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
 
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        if (rowNumber <= 30 && headerRowIndex === -1) {
-          let hasDate = false, hasDesc = false, hasAmount = false;
-          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-            const val = String(cell.value || '').toLowerCase().trim();
-            if (val.includes('date') || val === 'txn date' || val === 'value date') {
-              hasDate = true; colIndices.date = colNumber;
-            } else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) {
-              hasDesc = true; colIndices.desc = colNumber;
-            } else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) {
-              hasAmount = true; colIndices.credit = colNumber;
-            } else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) {
-              colIndices.debit = colNumber;
-            } else if (val === 'amount' || val === 'txn amount') {
-              hasAmount = true;
-              if (colIndices.credit === -1) colIndices.credit = colNumber;
-            } else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') {
-              colIndices.type = colNumber;
-            }
-          });
-          if (hasDate && hasDesc && hasAmount) {
-            headerRowIndex = rowNumber;
-            return;
-          }
+        if (headerRowIndex !== -1) return;
+        if (rowNumber > 30) return;
+        let hasDate = false, hasDesc = false, hasAmount = false;
+        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+          const val = String(cell.value || '').toLowerCase().trim();
+          if (val.includes('date') || val === 'txn date' || val === 'value date') { hasDate = true; colIndices.date = colNumber; }
+          else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) { hasDesc = true; colIndices.desc = colNumber; }
+          else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) { hasAmount = true; colIndices.credit = colNumber; }
+          else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) { colIndices.debit = colNumber; }
+          else if (val === 'amount' || val === 'txn amount') { hasAmount = true; if (colIndices.credit === -1) colIndices.credit = colNumber; }
+          else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') { colIndices.type = colNumber; }
+        });
+        if (hasDate && hasDesc && hasAmount) { headerRowIndex = rowNumber; }
+      });
+
+      if (headerRowIndex === -1) { console.log('[Highlight] No header found in sheet: ' + worksheet.name); return; }
+      console.log('[Highlight] Header at row ' + headerRowIndex);
+
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber <= headerRowIndex) return;
+        const dateCell   = colIndices.date   !== -1 ? row.getCell(colIndices.date)   : null;
+        const descCell   = colIndices.desc   !== -1 ? row.getCell(colIndices.desc)   : null;
+        const creditCell = colIndices.credit !== -1 ? row.getCell(colIndices.credit) : null;
+        const debitCell  = colIndices.debit  !== -1 ? row.getCell(colIndices.debit)  : null;
+        const typeCell   = colIndices.type   !== -1 ? row.getCell(colIndices.type)   : null;
+        if (!dateCell || !descCell || !creditCell) return;
+
+        let rawDate = dateCell.value; let rawDesc = descCell.value; let rawCredit = creditCell.value;
+        if (rawDate   && typeof rawDate   === 'object' && rawDate.result   !== undefined) rawDate   = rawDate.result;
+        if (rawDesc   && typeof rawDesc   === 'object' && rawDesc.result   !== undefined) rawDesc   = rawDesc.result;
+        if (rawCredit && typeof rawCredit === 'object' && rawCredit.result !== undefined) rawCredit = rawCredit.result;
+        if (!rawDate || !rawDesc) return;
+
+        let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
+        let debitAmt  = debitCell ? (parseFloat(String(debitCell.value || '0').replace(/,/g, '')) || 0) : 0;
+        if (colIndices.type !== -1 && typeCell && typeCell.value) {
+          const typeStr = String(typeCell.value).toUpperCase().trim();
+          if (typeStr.includes('DR') || typeStr === 'D') { debitAmt = creditAmt; creditAmt = 0; }
         }
 
-        if (headerRowIndex !== -1 && rowNumber > headerRowIndex) {
-          const dateCell = colIndices.date !== -1 ? row.getCell(colIndices.date) : null;
-          const descCell = colIndices.desc !== -1 ? row.getCell(colIndices.desc) : null;
-          const creditCell = colIndices.credit !== -1 ? row.getCell(colIndices.credit) : null;
-          const debitCell = colIndices.debit !== -1 ? row.getCell(colIndices.debit) : null;
-          const typeCell = colIndices.type !== -1 ? row.getCell(colIndices.type) : null;
-
-          if (!dateCell || !descCell || !creditCell) return;
-
-          let rawDate = dateCell.value;
-          if (rawDate && typeof rawDate === 'object' && rawDate.result !== undefined) {
-            rawDate = rawDate.result;
-          }
-          let rawDesc = descCell.value;
-          if (rawDesc && typeof rawDesc === 'object' && rawDesc.result !== undefined) {
-            rawDesc = rawDesc.result;
-          }
-          let rawCredit = creditCell.value;
-          if (rawCredit && typeof rawCredit === 'object' && rawCredit.result !== undefined) {
-            rawCredit = rawCredit.result;
-          }
-
-          if (!rawDate || !rawDesc) return;
-
-          let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
-          let debitAmt = debitCell ? (parseFloat(String(debitCell.value || '0').replace(/,/g, '')) || 0) : 0;
-
-          if (colIndices.type !== -1 && typeCell && typeCell.value) {
-            const typeStr = String(typeCell.value).toUpperCase().trim();
-            if (typeStr.includes('DR') || typeStr === 'D') {
-              debitAmt = creditAmt;
-              creditAmt = 0;
-            }
-          }
-
-          if (creditAmt > 0 && debitAmt === 0) {
-            const formattedDate = formatDateString(rawDate);
-            if (formattedDate) {
-              const key = `${formattedDate}|${creditAmt.toFixed(2)}|${getNormalizedDesc(rawDesc)}`;
-              if (matchedSet.has(key)) {
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                  cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFC6EFCE' }
-                  };
-                  cell.font = {
-                    ...(cell.font || {}),
-                    color: { argb: 'FF006100' },
-                    bold: true
-                  };
-                });
-              } else {
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                  if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
-                    cell.fill = undefined;
-                    if (cell.font) {
-                      cell.font = { ...cell.font, color: undefined, bold: false };
-                    }
-                  }
-                });
+        if (creditAmt > 0 && debitAmt === 0) {
+          const formattedDate = formatDateString(rawDate);
+          if (!formattedDate) return;
+          const key = formattedDate + '|' + creditAmt.toFixed(2) + '|' + getNormalizedDesc(rawDesc);
+          const isMatch = matchedSet.has(key);
+          console.log('[Highlight] Row ' + rowNumber + ': key="' + key + '" match=' + isMatch);
+          if (isMatch) {
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+              cell.font = { ...(cell.font || {}), color: { argb: 'FF006100' }, bold: true };
+            });
+          } else {
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
+                cell.fill = undefined;
+                if (cell.font) { cell.font = { ...cell.font, color: undefined, bold: false }; }
               }
-            }
+            });
           }
         }
       });
     });
 
     await workbook.xlsx.writeFile(filePath);
+    console.log('[Highlight] Excel file updated successfully.');
   } catch (error) {
     console.error('Error updating Excel file with matched rows:', error);
   }
+}
 }
 
 // Main parser logic
@@ -1497,14 +1471,18 @@ app.get('/api/statements/files/:id/view', async (req, res) => {
     // Update Excel file with green rows for matched statement entries
     await updateExcelFileWithMatchedRows(file.filePath);
 
+    // Read the freshly-written file (with highlighted rows) and send as buffer
+    const fileBuffer = fs.readFileSync(file.filePath);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
-    res.sendFile(file.filePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+    res.setHeader('Content-Length', fileBuffer.length);
+    res.end(fileBuffer);
   } catch (error) {
     console.error('Error viewing statement file:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // Delete specific statement file Endpoint
 app.delete('/api/statements/files/:id', async (req, res) => {
