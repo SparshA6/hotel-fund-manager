@@ -1108,8 +1108,9 @@ function formatDateString(rawDate) {
   return null;
 }
 
-// Helper to highlight matched rows in green inside the Excel file
-// Uses SheetJS (xlsx) to detect exact Excel row numbers, then ExcelJS to apply styling.
+// Helper to highlight matched rows in green inside the Excel file.
+// Rebuilds the file from scratch with ExcelJS to avoid Excel Table style conflicts
+// (Excel Table banding overrides individual cell fills when opening the file).
 async function updateExcelFileWithMatchedRows(filePath) {
   try {
     if (!fs.existsSync(filePath)) return;
@@ -1133,7 +1134,7 @@ async function updateExcelFileWithMatchedRows(filePath) {
     console.log('[Highlight] Total matched keys: ' + matchedSet.size);
     if (matchedSet.size === 0) return;
 
-    // Step 1: Use SheetJS (same library as parser) to find exact Excel row numbers of matched rows
+    // Step 1: Use SheetJS to read the file and find matched row numbers
     const fileBuffer = fs.readFileSync(filePath);
     const xlsxWb = xlsx.read(fileBuffer, { type: 'buffer', cellDates: true });
     const matchedRowsBySheet = {}; // sheetName -> Set<1-indexed Excel row number>
@@ -1144,7 +1145,6 @@ async function updateExcelFileWithMatchedRows(filePath) {
       if (!ref) continue;
       const range = xlsx.utils.decode_range(ref);
 
-      // Find header row by scanning cells directly
       let headerRow = -1;
       let colIdx = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
 
@@ -1165,11 +1165,8 @@ async function updateExcelFileWithMatchedRows(filePath) {
         if (hasDate && hasDesc && hasAmount) { headerRow = r; colIdx = tmp; break; }
       }
 
-      if (headerRow === -1) {
-        console.log('[Highlight] SheetJS: No header found in sheet ' + sheetName);
-        continue;
-      }
-      console.log('[Highlight] SheetJS: Header at SheetJS row ' + headerRow + ' (Excel row ' + (headerRow + 1) + ') in ' + sheetName);
+      if (headerRow === -1) { console.log('[Highlight] No header found in ' + sheetName); continue; }
+      console.log('[Highlight] Header at Excel row ' + (headerRow + 1) + ' in sheet: ' + sheetName);
 
       matchedRowsBySheet[sheetName] = new Set();
 
@@ -1182,65 +1179,80 @@ async function updateExcelFileWithMatchedRows(filePath) {
 
         if (!dateCell || !descCell) continue;
 
-        const rawDate   = dateCell.v;
-        const rawDesc   = descCell.v;
-        const rawCredit = creditCell ? creditCell.v : null;
-        const rawDebit  = debitCell  ? debitCell.v  : null;
-        const rawType   = typeCell   ? typeCell.v   : '';
-
-        if (!rawDate || !rawDesc) continue;
-
-        let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
-        let debitAmt  = rawDebit != null ? (parseFloat(String(rawDebit  || '0').replace(/,/g, '')) || 0) : 0;
-        if (rawType) {
-          const typeStr = String(rawType).toUpperCase().trim();
+        let creditAmt = parseFloat(String((creditCell ? creditCell.v : null) || '0').replace(/,/g, '')) || 0;
+        let debitAmt  = debitCell ? (parseFloat(String(debitCell.v || '0').replace(/,/g, '')) || 0) : 0;
+        if (typeCell && typeCell.v) {
+          const typeStr = String(typeCell.v).toUpperCase().trim();
           if (typeStr.includes('DR') || typeStr === 'D') { debitAmt = creditAmt; creditAmt = 0; }
         }
 
         if (creditAmt > 0 && debitAmt === 0) {
-          const formattedDate = formatDateString(rawDate);
+          const formattedDate = formatDateString(dateCell.v);
           if (!formattedDate) continue;
-          const key = formattedDate + '|' + creditAmt.toFixed(2) + '|' + getNormalizedDesc(rawDesc);
+          const key = formattedDate + '|' + creditAmt.toFixed(2) + '|' + getNormalizedDesc(descCell.v);
           if (matchedSet.has(key)) {
-            const excelRowNum = r + 1; // SheetJS is 0-indexed, Excel rows are 1-indexed
-            matchedRowsBySheet[sheetName].add(excelRowNum);
-            console.log('[Highlight] Match found at Excel row ' + excelRowNum + ': ' + key);
+            matchedRowsBySheet[sheetName].add(r + 1);
+            console.log('[Highlight] Matched row ' + (r + 1) + ': ' + key);
           }
         }
       }
     }
 
-    // Step 2: Use ExcelJS to apply green highlighting to the identified row numbers
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    // Step 2: Rebuild the entire file from scratch using ExcelJS (no table structure = fills work reliably)
+    const newWorkbook = new ExcelJS.Workbook();
 
-    workbook.eachSheet((worksheet) => {
-      const matchedRows = matchedRowsBySheet[worksheet.name];
-      if (!matchedRows || matchedRows.size === 0) {
-        console.log('[Highlight] No matched rows for sheet: ' + worksheet.name);
-        return;
-      }
-      console.log('[Highlight] Applying green to ' + matchedRows.size + ' rows in sheet: ' + worksheet.name);
+    for (const sheetName of xlsxWb.SheetNames) {
+      const sheet = xlsxWb.Sheets[sheetName];
+      const ref = sheet['!ref'];
+      if (!ref) continue;
+      const range = xlsx.utils.decode_range(ref);
+      const matchedRows = matchedRowsBySheet[sheetName] || new Set();
 
-      worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-        if (matchedRows.has(rowNumber)) {
-          row.eachCell({ includeEmpty: true }, (cell) => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
-            cell.font = { ...(cell.font || {}), color: { argb: 'FF006100' }, bold: true };
-          });
-        } else {
-          row.eachCell({ includeEmpty: true }, (cell) => {
-            if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
-              cell.fill = undefined;
-              if (cell.font) { cell.font = { ...cell.font, color: undefined, bold: false }; }
-            }
-          });
+      const newSheet = newWorkbook.addWorksheet(sheetName);
+
+      // Preserve column widths
+      const colInfo = sheet['!cols'] || [];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const ci = colInfo[c];
+        if (ci && (ci.wch || ci.width)) {
+          newSheet.getColumn(c + 1).width = ci.wch || ci.width || 15;
         }
-      });
-    });
+      }
 
-    await workbook.xlsx.writeFile(filePath);
-    console.log('[Highlight] Excel file updated and saved successfully.');
+      // Copy all cell data and apply green fills to matched rows
+      for (let r = range.s.r; r <= range.e.r; r++) {
+        const excelRowNum = r + 1;
+        const isMatched = matchedRows.has(excelRowNum);
+        const newRow = newSheet.getRow(excelRowNum);
+
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const srcCell = sheet[xlsx.utils.encode_cell({ r, c })];
+          if (!srcCell) continue;
+
+          const newCell = newRow.getCell(c + 1); // ExcelJS is 1-indexed
+
+          // Copy value (handle dates specially)
+          if (srcCell.t === 'd' && srcCell.v instanceof Date) {
+            newCell.value = srcCell.v;
+            newCell.numFmt = srcCell.z || 'dd-mmm-yy';
+          } else {
+            newCell.value = (srcCell.v != null) ? srcCell.v : '';
+            if (srcCell.z) newCell.numFmt = srcCell.z;
+          }
+
+          // Apply green highlight for matched rows
+          if (isMatched) {
+            newCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+            newCell.font = { color: { argb: 'FF006100' }, bold: true };
+          }
+        }
+        newRow.commit();
+      }
+    }
+
+    await newWorkbook.xlsx.writeFile(filePath);
+    const totalHighlighted = Object.values(matchedRowsBySheet).reduce((s, set) => s + set.size, 0);
+    console.log('[Highlight] File rebuilt with ' + totalHighlighted + ' highlighted rows.');
   } catch (error) {
     console.error('Error updating Excel file with matched rows:', error);
   }
