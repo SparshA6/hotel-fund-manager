@@ -1109,6 +1109,7 @@ function formatDateString(rawDate) {
 }
 
 // Helper to highlight matched rows in green inside the Excel file
+// Uses SheetJS (xlsx) to detect exact Excel row numbers, then ExcelJS to apply styling.
 async function updateExcelFileWithMatchedRows(filePath) {
   try {
     if (!fs.existsSync(filePath)) return;
@@ -1128,83 +1129,118 @@ async function updateExcelFileWithMatchedRows(filePath) {
     for (const r of matchedRecords) {
       const key = r.date + '|' + r.amount.toFixed(2) + '|' + getNormalizedDesc(r.description);
       matchedSet.add(key);
-      console.log('[Highlight] Matched key: ' + key);
     }
     console.log('[Highlight] Total matched keys: ' + matchedSet.size);
+    if (matchedSet.size === 0) return;
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+    // Step 1: Use SheetJS (same library as parser) to find exact Excel row numbers of matched rows
+    const fileBuffer = fs.readFileSync(filePath);
+    const xlsxWb = xlsx.read(fileBuffer, { type: 'buffer', cellDates: true });
+    const matchedRowsBySheet = {}; // sheetName -> Set<1-indexed Excel row number>
 
-    workbook.eachSheet((worksheet) => {
-      let headerRowIndex = -1;
-      let colIndices = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
+    for (const sheetName of xlsxWb.SheetNames) {
+      const sheet = xlsxWb.Sheets[sheetName];
+      const ref = sheet['!ref'];
+      if (!ref) continue;
+      const range = xlsx.utils.decode_range(ref);
 
-      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        if (headerRowIndex !== -1) return;
-        if (rowNumber > 30) return;
+      // Find header row by scanning cells directly
+      let headerRow = -1;
+      let colIdx = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
+
+      for (let r = range.s.r; r <= Math.min(range.s.r + 30, range.e.r); r++) {
         let hasDate = false, hasDesc = false, hasAmount = false;
-        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-          const val = String(cell.value || '').toLowerCase().trim();
-          if (val.includes('date') || val === 'txn date' || val === 'value date') { hasDate = true; colIndices.date = colNumber; }
-          else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) { hasDesc = true; colIndices.desc = colNumber; }
-          else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) { hasAmount = true; colIndices.credit = colNumber; }
-          else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) { colIndices.debit = colNumber; }
-          else if (val === 'amount' || val === 'txn amount') { hasAmount = true; if (colIndices.credit === -1) colIndices.credit = colNumber; }
-          else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') { colIndices.type = colNumber; }
-        });
-        if (hasDate && hasDesc && hasAmount) { headerRowIndex = rowNumber; }
-      });
+        let tmp = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = sheet[xlsx.utils.encode_cell({ r, c })];
+          if (!cell) continue;
+          const val = String(cell.v || '').toLowerCase().trim();
+          if (val.includes('date') || val === 'txn date' || val === 'value date') { hasDate = true; tmp.date = c; }
+          else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) { hasDesc = true; tmp.desc = c; }
+          else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) { hasAmount = true; tmp.credit = c; }
+          else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) { tmp.debit = c; }
+          else if (val === 'amount' || val === 'txn amount') { hasAmount = true; if (tmp.credit === -1) tmp.credit = c; }
+          else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') { tmp.type = c; }
+        }
+        if (hasDate && hasDesc && hasAmount) { headerRow = r; colIdx = tmp; break; }
+      }
 
-      if (headerRowIndex === -1) { console.log('[Highlight] No header found in sheet: ' + worksheet.name); return; }
-      console.log('[Highlight] Header at row ' + headerRowIndex);
+      if (headerRow === -1) {
+        console.log('[Highlight] SheetJS: No header found in sheet ' + sheetName);
+        continue;
+      }
+      console.log('[Highlight] SheetJS: Header at SheetJS row ' + headerRow + ' (Excel row ' + (headerRow + 1) + ') in ' + sheetName);
 
-      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        if (rowNumber <= headerRowIndex) return;
-        const dateCell   = colIndices.date   !== -1 ? row.getCell(colIndices.date)   : null;
-        const descCell   = colIndices.desc   !== -1 ? row.getCell(colIndices.desc)   : null;
-        const creditCell = colIndices.credit !== -1 ? row.getCell(colIndices.credit) : null;
-        const debitCell  = colIndices.debit  !== -1 ? row.getCell(colIndices.debit)  : null;
-        const typeCell   = colIndices.type   !== -1 ? row.getCell(colIndices.type)   : null;
-        if (!dateCell || !descCell || !creditCell) return;
+      matchedRowsBySheet[sheetName] = new Set();
 
-        let rawDate = dateCell.value; let rawDesc = descCell.value; let rawCredit = creditCell.value;
-        if (rawDate   && typeof rawDate   === 'object' && rawDate.result   !== undefined) rawDate   = rawDate.result;
-        if (rawDesc   && typeof rawDesc   === 'object' && rawDesc.result   !== undefined) rawDesc   = rawDesc.result;
-        if (rawCredit && typeof rawCredit === 'object' && rawCredit.result !== undefined) rawCredit = rawCredit.result;
-        if (!rawDate || !rawDesc) return;
+      for (let r = headerRow + 1; r <= range.e.r; r++) {
+        const dateCell   = sheet[xlsx.utils.encode_cell({ r, c: colIdx.date })];
+        const descCell   = sheet[xlsx.utils.encode_cell({ r, c: colIdx.desc })];
+        const creditCell = colIdx.credit !== -1 ? sheet[xlsx.utils.encode_cell({ r, c: colIdx.credit })] : null;
+        const debitCell  = colIdx.debit  !== -1 ? sheet[xlsx.utils.encode_cell({ r, c: colIdx.debit  })] : null;
+        const typeCell   = colIdx.type   !== -1 ? sheet[xlsx.utils.encode_cell({ r, c: colIdx.type   })] : null;
+
+        if (!dateCell || !descCell) continue;
+
+        const rawDate   = dateCell.v;
+        const rawDesc   = descCell.v;
+        const rawCredit = creditCell ? creditCell.v : null;
+        const rawDebit  = debitCell  ? debitCell.v  : null;
+        const rawType   = typeCell   ? typeCell.v   : '';
+
+        if (!rawDate || !rawDesc) continue;
 
         let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
-        let debitAmt  = debitCell ? (parseFloat(String(debitCell.value || '0').replace(/,/g, '')) || 0) : 0;
-        if (colIndices.type !== -1 && typeCell && typeCell.value) {
-          const typeStr = String(typeCell.value).toUpperCase().trim();
+        let debitAmt  = rawDebit != null ? (parseFloat(String(rawDebit  || '0').replace(/,/g, '')) || 0) : 0;
+        if (rawType) {
+          const typeStr = String(rawType).toUpperCase().trim();
           if (typeStr.includes('DR') || typeStr === 'D') { debitAmt = creditAmt; creditAmt = 0; }
         }
 
         if (creditAmt > 0 && debitAmt === 0) {
           const formattedDate = formatDateString(rawDate);
-          if (!formattedDate) return;
+          if (!formattedDate) continue;
           const key = formattedDate + '|' + creditAmt.toFixed(2) + '|' + getNormalizedDesc(rawDesc);
-          const isMatch = matchedSet.has(key);
-          console.log('[Highlight] Row ' + rowNumber + ': key="' + key + '" match=' + isMatch);
-          if (isMatch) {
-            row.eachCell({ includeEmpty: true }, (cell) => {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
-              cell.font = { ...(cell.font || {}), color: { argb: 'FF006100' }, bold: true };
-            });
-          } else {
-            row.eachCell({ includeEmpty: true }, (cell) => {
-              if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
-                cell.fill = undefined;
-                if (cell.font) { cell.font = { ...cell.font, color: undefined, bold: false }; }
-              }
-            });
+          if (matchedSet.has(key)) {
+            const excelRowNum = r + 1; // SheetJS is 0-indexed, Excel rows are 1-indexed
+            matchedRowsBySheet[sheetName].add(excelRowNum);
+            console.log('[Highlight] Match found at Excel row ' + excelRowNum + ': ' + key);
           }
+        }
+      }
+    }
+
+    // Step 2: Use ExcelJS to apply green highlighting to the identified row numbers
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    workbook.eachSheet((worksheet) => {
+      const matchedRows = matchedRowsBySheet[worksheet.name];
+      if (!matchedRows || matchedRows.size === 0) {
+        console.log('[Highlight] No matched rows for sheet: ' + worksheet.name);
+        return;
+      }
+      console.log('[Highlight] Applying green to ' + matchedRows.size + ' rows in sheet: ' + worksheet.name);
+
+      worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        if (matchedRows.has(rowNumber)) {
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
+            cell.font = { ...(cell.font || {}), color: { argb: 'FF006100' }, bold: true };
+          });
+        } else {
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
+              cell.fill = undefined;
+              if (cell.font) { cell.font = { ...cell.font, color: undefined, bold: false }; }
+            }
+          });
         }
       });
     });
 
     await workbook.xlsx.writeFile(filePath);
-    console.log('[Highlight] Excel file updated successfully.');
+    console.log('[Highlight] Excel file updated and saved successfully.');
   } catch (error) {
     console.error('Error updating Excel file with matched rows:', error);
   }
