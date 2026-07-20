@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const fs = require('fs');
@@ -1208,7 +1208,6 @@ async function updateExcelFileWithMatchedRows(filePath) {
   } catch (error) {
     console.error('Error updating Excel file with matched rows:', error);
   }
-}
 }
 
 // Main parser logic
