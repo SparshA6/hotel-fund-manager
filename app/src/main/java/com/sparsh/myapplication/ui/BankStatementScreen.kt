@@ -29,10 +29,8 @@ import com.sparsh.myapplication.BookingRepository
 import com.sparsh.myapplication.StatementRecord
 import com.sparsh.myapplication.UploadedFileInfo
 import kotlinx.coroutines.launch
-import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -50,7 +48,7 @@ fun BankStatementScreen(
     var uploadedFiles by remember { mutableStateOf<List<UploadedFileInfo>>(emptyList()) }
     var selectedTab by remember { mutableStateOf(0) } // 0: Unmatched, 1: Matched
     var isLoading by remember { mutableStateOf(false) }
-    var showOverviewDetails by remember { mutableStateOf(false) }
+    var showFilesDialog by remember { mutableStateOf(false) }
     
     // Load existing statements on startup
     LaunchedEffect(Unit) {
@@ -78,58 +76,84 @@ fun BankStatementScreen(
             
             val matchesAmount = filterAmount.isBlank() || run {
                 val amtQuery = filterAmount.toDoubleOrNull()
-                amtQuery == null || Math.abs(record.amount - amtQuery) < 1.0 || record.amount.toString().contains(filterAmount)
+                if (amtQuery != null) {
+                    Math.abs(record.amount - amtQuery) < 1.0
+                } else {
+                    record.amount.toString().contains(filterAmount)
+                }
             }
             
             val matchesMonth = filterMonth == "All Months" || run {
-                val monthIndex = when (filterMonth) {
-                    "Jan" -> "-01-"
-                    "Feb" -> "-02-"
-                    "Mar" -> "-03-"
-                    "Apr" -> "-04-"
-                    "May" -> "-05-"
-                    "Jun" -> "-06-"
-                    "Jul" -> "-07-"
-                    "Aug" -> "-08-"
-                    "Sep" -> "-09-"
-                    "Oct" -> "-10-"
-                    "Nov" -> "-11-"
-                    "Dec" -> "-12-"
-                    else -> ""
-                }
-                if (monthIndex.isEmpty()) true else record.date.contains(monthIndex)
+                val parts = record.date.split("-")
+                if (parts.size >= 2) {
+                    val mNum = parts[1].toIntOrNull() ?: -1
+                    val monthNames = listOf("", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+                    if (mNum in 1..12) monthNames[mNum] == filterMonth else false
+                } else false
             }
             
             matchesText && matchesAmount && matchesMonth
         }
     }
 
-    // Unfiltered counts for tabs
+    val unmatchedList = remember(filteredStatementList) { filteredStatementList.filter { !it.isMatched } }
+    val matchedList = remember(filteredStatementList) { filteredStatementList.filter { it.isMatched } }
+
     val totalUnmatchedCount = remember(statementList) { statementList.count { !it.isMatched } }
     val totalMatchedCount = remember(statementList) { statementList.count { it.isMatched } }
 
-    val unmatchedList = remember(filteredStatementList) { filteredStatementList.filter { !it.isMatched } }
-    val matchedList = remember(filteredStatementList) { filteredStatementList.filter { it.isMatched } }
-    
-    // File picker launcher
+    val availableMonths = remember(statementList) {
+        val monthNames = listOf("", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        val foundMonths = mutableSetOf<String>()
+        statementList.forEach { record ->
+            val parts = record.date.split("-")
+            if (parts.size >= 2) {
+                val mNum = parts[1].toIntOrNull() ?: -1
+                if (mNum in 1..12) {
+                    foundMonths.add(monthNames[mNum])
+                }
+            }
+        }
+        listOf("All Months") + foundMonths.toList().sorted()
+    }
+
+    // File picker launcher for uploading bank statements
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
+        uri?.let { selectedUri ->
             coroutineScope.launch {
                 isLoading = true
                 try {
                     val contentResolver = context.contentResolver
-                    val inputStream = contentResolver.openInputStream(uri)
+                    val fileName = run {
+                        var name = "bank_statement.xlsx"
+                        val cursor = contentResolver.query(selectedUri, null, null, null, null)
+                        cursor?.use {
+                            if (it.moveToFirst()) {
+                                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (nameIndex != -1) {
+                                    name = it.getString(nameIndex)
+                                }
+                            }
+                        }
+                        name
+                    }
+
+                    val inputStream = contentResolver.openInputStream(selectedUri)
                     val bytes = inputStream?.readBytes()
+                    inputStream?.close()
+
                     if (bytes != null) {
-                        val requestFile = bytes.toRequestBody("application/octet-stream".toMediaTypeOrNull())
-                        val body = MultipartBody.Part.createFormData("statement", "statement.xlsx", requestFile)
-                        statementList = bookingRepository.uploadStatement(body)
+                        val requestFile = bytes.toRequestBody("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".toMediaTypeOrNull())
+                        val body = MultipartBody.Part.createFormData("file", fileName, requestFile)
+
+                        val records = bookingRepository.uploadStatement(body)
+                        statementList = records
                         uploadedFiles = bookingRepository.getUploadedFiles()
-                        Toast.makeText(context, "Statement uploaded & parsed successfully!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Statement file uploaded successfully", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "Could not read file", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Failed to read file", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     Toast.makeText(context, "Upload failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -148,18 +172,95 @@ fun BankStatementScreen(
                         Text(
                             text = "Bank Reconciliation",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            fontSize = 17.sp
                         )
-                        Text(
-                            text = "Match GPay statement entries with booking receipts",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
+                        if (statementList.isNotEmpty()) {
+                            val matchProgressPercent = ((totalMatchedCount.toFloat() / statementList.size.toFloat()) * 100).toInt()
+                            Text(
+                                text = "${statementList.size} entries • $totalMatchedCount matched ($matchProgressPercent%)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Text(
+                                text = "Upload GPay statement to reconcile",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (statementList.isNotEmpty()) {
+                        // Reconcile Button
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    try {
+                                        statementList = bookingRepository.matchStatements()
+                                        Toast.makeText(context, "Matching completed successfully!", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Match failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = "Reconcile Payments", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        // Upload New Button
+                        IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Upload Statement", tint = MaterialTheme.colorScheme.primary)
+                        }
+
+                        // Toggle Search/Filter
+                        IconButton(onClick = { showFilters = !showFilters }) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Filter",
+                                tint = if (showFilters || filterText.isNotEmpty() || filterAmount.isNotEmpty() || filterMonth != "All Months") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Uploaded Files Dialog
+                        if (uploadedFiles.isNotEmpty()) {
+                            IconButton(onClick = { showFilesDialog = true }) {
+                                Icon(imageVector = Icons.Default.List, contentDescription = "Files", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        // Clear All Statements
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    try {
+                                        bookingRepository.clearStatements()
+                                        statementList = emptyList()
+                                        uploadedFiles = emptyList()
+                                        Toast.makeText(context, "Statements cleared successfully", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Clear failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear Statements", tint = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Upload Statement", tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -177,471 +278,10 @@ fun BankStatementScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Summary and Stats Card
-                item {
-                    val latestStatementDate = remember(statementList) {
-                        if (statementList.isEmpty()) null
-                        else statementList.map { it.date }.maxOrNull()
-                    }
-                    val matchProgress = if (statementList.isEmpty()) 0f else (matchedList.size.toFloat() / statementList.size.toFloat())
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .let {
-                                        if (statementList.isNotEmpty()) it.clickable { showOverviewDetails = !showOverviewDetails } else it
-                                    },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Statement Overview",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        if (statementList.isNotEmpty()) {
-                                            Badge(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            ) {
-                                                Text("${(matchProgress * 100).toInt()}% matched")
-                                            }
-                                        }
-                                    }
-                                    Text(
-                                        text = if (statementList.isEmpty()) "No statement uploaded" else "${statementList.size} deposit transactions found",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                    latestStatementDate?.let { date ->
-                                        Text(
-                                            text = "Uploaded till: $date",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                                
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (statementList.isEmpty()) {
-                                        Button(
-                                            onClick = { filePickerLauncher.launch("*/*") },
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "Upload",
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Upload Statement", fontSize = 13.sp)
-                                        }
-                                    } else {
-                                        IconButton(
-                                            onClick = {
-                                                coroutineScope.launch {
-                                                    isLoading = true
-                                                    try {
-                                                        bookingRepository.clearStatements()
-                                                        statementList = emptyList()
-                                                        uploadedFiles = emptyList()
-                                                        Toast.makeText(context, "Statements cleared successfully", Toast.LENGTH_SHORT).show()
-                                                    } catch (e: Exception) {
-                                                        Toast.makeText(context, "Clear failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                                    } finally {
-                                                        isLoading = false
-                                                    }
-                                                }
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Clear",
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        Icon(
-                                            imageVector = if (showOverviewDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                            contentDescription = "Toggle Overview Details",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (statementList.isNotEmpty() && showOverviewDetails) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = "Reconciliation Progress",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                        )
-                                        Text(
-                                            text = "${matchedList.size}/${statementList.size} matched (${(matchProgress * 100).toInt()}%)",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    LinearProgressIndicator(
-                                        progress = { matchProgress },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                isLoading = true
-                                                try {
-                                                    statementList = bookingRepository.matchStatements()
-                                                    Toast.makeText(context, "Matching completed successfully!", Toast.LENGTH_SHORT).show()
-                                                } catch (e: Exception) {
-                                                    Toast.makeText(context, "Match failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                                } finally {
-                                                    isLoading = false
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Reconcile",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Reconcile Payments", fontSize = 13.sp)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { filePickerLauncher.launch("*/*") },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Upload New",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Upload New", fontSize = 13.sp)
-                                    }
-                                }
-
-                        // Collapsible Uploaded Files List
-                        if (uploadedFiles.isNotEmpty()) {
-                            var showFilesList by remember { mutableStateOf(false) }
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showFilesList = !showFilesList }
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Uploaded Files (${uploadedFiles.size})",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Icon(
-                                    imageVector = if (showFilesList) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Toggle Files",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            if (showFilesList) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    uploadedFiles.forEach { file ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            bookingRepository.deleteUploadedFile(file.id)
-                                                            uploadedFiles = bookingRepository.getUploadedFiles()
-                                                            statementList = bookingRepository.getStatements()
-                                                            Toast.makeText(context, "Statement file deleted", Toast.LENGTH_SHORT).show()
-                                                        } catch (e: Exception) {
-                                                            Toast.makeText(context, "Error deleting file: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                                        }
-                                                    }
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Delete File",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .clickable { openExcelFile(context, file.id) }
-                                                    .padding(vertical = 4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.List,
-                                                    contentDescription = "File",
-                                                    modifier = Modifier.size(14.dp),
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                                Text(
-                                                    text = formatFileDisplayName(file),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                            Text(
-                                                text = formatUploadDate(file.uploadDate),
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-                // Filtration Card
-                if (statementList.isNotEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showFilters = !showFilters },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "Search",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "Filter Transactions",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (filterText.isNotEmpty() || filterAmount.isNotEmpty() || filterMonth != "All Months") {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .background(
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    shape = RoundedCornerShape(6.dp)
-                                                )
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = "Active",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onPrimary,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                                Icon(
-                                    imageVector = if (showFilters) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Expand",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            if (showFilters) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = filterText,
-                                        onValueChange = { filterText = it },
-                                        label = { Text("Desc/Remarks", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1.5f),
-                                        textStyle = MaterialTheme.typography.bodySmall,
-                                        singleLine = true,
-                                        trailingIcon = {
-                                            if (filterText.isNotEmpty()) {
-                                                IconButton(onClick = { filterText = "" }) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = "Clear",
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-
-                                    OutlinedTextField(
-                                        value = filterAmount,
-                                        onValueChange = { filterAmount = it },
-                                        label = { Text("Amount", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f),
-                                        textStyle = MaterialTheme.typography.bodySmall,
-                                        singleLine = true,
-                                        trailingIcon = {
-                                            if (filterAmount.isNotEmpty()) {
-                                                IconButton(onClick = { filterAmount = "" }) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = "Clear",
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    var monthMenuExpanded by remember { mutableStateOf(false) }
-                                    val monthsList = listOf(
-                                        "All Months", "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-                                    )
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        OutlinedTextField(
-                                            value = filterMonth,
-                                            onValueChange = {},
-                                            readOnly = true,
-                                            label = { Text("Month", fontSize = 11.sp) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { monthMenuExpanded = true },
-                                            enabled = false,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                                disabledBorderColor = MaterialTheme.colorScheme.outline,
-                                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            ),
-                                            textStyle = MaterialTheme.typography.bodySmall,
-                                            trailingIcon = {
-                                                Icon(
-                                                    imageVector = Icons.Default.ArrowDropDown,
-                                                    contentDescription = "Dropdown",
-                                                    modifier = Modifier.clickable { monthMenuExpanded = true }
-                                                )
-                                            }
-                                        )
-                                        DropdownMenu(
-                                            expanded = monthMenuExpanded,
-                                            onDismissRequest = { monthMenuExpanded = false }
-                                        ) {
-                                            monthsList.forEach { m ->
-                                                DropdownMenuItem(
-                                                    text = { Text(m) },
-                                                    onClick = {
-                                                        filterMonth = m
-                                                        monthMenuExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (filterText.isNotEmpty() || filterAmount.isNotEmpty() || filterMonth != "All Months") {
-                                        TextButton(
-                                            onClick = {
-                                                filterText = ""
-                                                filterAmount = ""
-                                                filterMonth = "All Months"
-                                            }
-                                        ) {
-                                            Text("Reset", fontSize = 12.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 if (statementList.isNotEmpty()) {
                     // Tab Selector Sticky Header
                     stickyHeader {
@@ -653,7 +293,7 @@ fun BankStatementScreen(
                                 selectedTabIndex = selectedTab,
                                 containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                             ) {
                                 Tab(
                                     selected = selectedTab == 0,
@@ -691,7 +331,54 @@ fun BankStatementScreen(
                         }
                     }
 
-                    // Statements Table/List
+                    // Optional Filter Bar Item
+                    if (showFilters) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = filterText,
+                                        onValueChange = { filterText = it },
+                                        placeholder = { Text("Search description...", fontSize = 13.sp) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = filterAmount,
+                                            onValueChange = { filterAmount = it },
+                                            placeholder = { Text("Amount ₹", fontSize = 13.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true
+                                        )
+                                        TextButton(
+                                            onClick = {
+                                                filterText = ""
+                                                filterAmount = ""
+                                                filterMonth = "All Months"
+                                            }
+                                        ) {
+                                            Text("Reset", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Statements List
                     val activeList = if (selectedTab == 0) unmatchedList else matchedList
                     
                     if (activeList.isEmpty()) {
@@ -699,7 +386,7 @@ fun BankStatementScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
+                                    .padding(vertical = 48.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(
@@ -736,21 +423,26 @@ fun BankStatementScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp),
+                                .padding(vertical = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.List,
-                                    contentDescription = "Spreadsheet Icon",
-                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = "Upload Icon",
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(64.dp)
                                 )
                                 Text(
-                                    text = "Excel statement parser handles most GPay statement layouts",
+                                    text = "No bank statement uploaded yet",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = "Select an Excel statement file to parse deposit transactions",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                 )
@@ -758,10 +450,7 @@ fun BankStatementScreen(
                                     onClick = { filePickerLauncher.launch("*/*") },
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Upload Icon"
-                                    )
+                                    Icon(imageVector = Icons.Default.Add, contentDescription = "Upload Icon")
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Select Bank Statement file")
                                 }
@@ -782,9 +471,98 @@ fun BankStatementScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
+
+            // Uploaded Files Dialog
+            if (showFilesDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFilesDialog = false },
+                    title = {
+                        Text(
+                            text = "Uploaded Files (${uploadedFiles.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            uploadedFiles.forEach { file ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    try {
+                                                        bookingRepository.deleteUploadedFile(file.id)
+                                                        uploadedFiles = bookingRepository.getUploadedFiles()
+                                                        statementList = bookingRepository.getStatements()
+                                                        Toast.makeText(context, "File deleted", Toast.LENGTH_SHORT).show()
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete File",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { openExcelFile(context, file.id) }
+                                                .padding(horizontal = 6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.List,
+                                                contentDescription = "File",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = formatFileDisplayName(file),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Text(
+                                            text = formatUploadDate(file.uploadDate),
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showFilesDialog = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
         }
     }
-}
 }
 
 @Composable
