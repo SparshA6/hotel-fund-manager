@@ -7,7 +7,9 @@ data class UploadedFileInfo(
     val filename: String,
     val originalName: String,
     val uploadDate: String,
-    val filePath: String
+    val filePath: String,
+    val startDate: String? = null,
+    val endDate: String? = null
 ) {
     fun toJsonObject(): JSONObject {
         val json = JSONObject()
@@ -16,6 +18,8 @@ data class UploadedFileInfo(
         json.put("originalName", originalName)
         json.put("uploadDate", uploadDate)
         json.put("filePath", filePath)
+        json.put("startDate", startDate ?: "")
+        json.put("endDate", endDate ?: "")
         return json
     }
 
@@ -26,7 +30,9 @@ data class UploadedFileInfo(
                 filename = json.getString("filename"),
                 originalName = json.getString("originalName"),
                 uploadDate = json.getString("uploadDate"),
-                filePath = json.getString("filePath")
+                filePath = json.getString("filePath"),
+                startDate = json.optString("startDate", "").ifEmpty { null },
+                endDate = json.optString("endDate", "").ifEmpty { null }
             )
         }
     }

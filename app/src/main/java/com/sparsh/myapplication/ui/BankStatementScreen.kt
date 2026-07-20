@@ -381,23 +381,49 @@ fun BankStatementScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            IconButton(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            bookingRepository.deleteUploadedFile(file.id)
+                                                            uploadedFiles = bookingRepository.getUploadedFiles()
+                                                            statementList = bookingRepository.getStatements()
+                                                            Toast.makeText(context, "Statement file deleted", Toast.LENGTH_SHORT).show()
+                                                        } catch (e: Exception) {
+                                                            Toast.makeText(context, "Error deleting file: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete File",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                modifier = Modifier.weight(1f)
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { openExcelFile(context, file.id) }
+                                                    .padding(vertical = 4.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.List,
                                                     contentDescription = "File",
                                                     modifier = Modifier.size(14.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                    tint = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
-                                                    text = file.originalName,
+                                                    text = formatFileDisplayName(file),
                                                     fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.primary
                                                 )
                                             }
                                             Text(
@@ -819,5 +845,45 @@ fun formatUploadDate(isoDateStr: String): String {
         }
     } catch (e: Exception) {
         isoDateStr
+    }
+}
+
+fun formatFileDisplayName(file: UploadedFileInfo): String {
+    val start = file.startDate
+    val end = file.endDate
+    if (!start.isNullOrEmpty() && !end.isNullOrEmpty()) {
+        val formattedStart = formatIsoDateToDisplay(start)
+        val formattedEnd = formatIsoDateToDisplay(end)
+        return if (formattedStart == formattedEnd) formattedStart else "$formattedStart – $formattedEnd"
+    }
+    return file.originalName
+}
+
+fun formatIsoDateToDisplay(dateStr: String): String {
+    return try {
+        val parts = dateStr.split("-")
+        if (parts.size == 3) {
+            val months = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+            val monthIdx = (parts[1].toIntOrNull() ?: 1) - 1
+            val monthName = if (monthIdx in 0..11) months[monthIdx] else parts[1]
+            "${parts[2]} $monthName ${parts[0]}"
+        } else {
+            dateStr
+        }
+    } catch (e: Exception) {
+        dateStr
+    }
+}
+
+fun openExcelFile(context: android.content.Context, fileId: String) {
+    try {
+        val baseUrl = "https://hotel-fund-manager.onrender.com/"
+        val url = "${baseUrl}api/statements/files/$fileId/view"
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "Unable to open file: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
 }

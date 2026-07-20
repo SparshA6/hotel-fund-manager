@@ -79,6 +79,9 @@ interface BookingApi {
     @GET("api/statements/files")
     suspend fun getUploadedFiles(): List<UploadedFileInfo>
 
+    @DELETE("api/statements/files/{id}")
+    suspend fun deleteUploadedFile(@Path("id") id: String): Response<Unit>
+
     @POST("api/statements/match")
     suspend fun matchStatements(): List<StatementRecord>
 

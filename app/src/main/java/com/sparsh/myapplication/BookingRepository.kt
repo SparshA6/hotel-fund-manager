@@ -292,6 +292,10 @@ class BookingRepository(context: Context) {
         api.getUploadedFiles()
     }
 
+    suspend fun deleteUploadedFile(id: String) = withContext(Dispatchers.IO) {
+        api.deleteUploadedFile(id)
+    }
+
     suspend fun matchStatements(): List<StatementRecord> = withContext(Dispatchers.IO) {
         api.matchStatements()
     }

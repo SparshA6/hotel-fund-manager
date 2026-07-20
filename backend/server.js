@@ -6,6 +6,7 @@ const path = require('path');
 const { google } = require('googleapis');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 require('dotenv').config();
 
 const app = express();
@@ -310,7 +311,8 @@ const StatementRecordSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   isMatched: { type: Boolean, default: false },
   matchedBookingId: { type: String, default: "" },
-  matchedPaymentId: { type: String, default: "" }
+  matchedPaymentId: { type: String, default: "" },
+  fileIds: { type: [String], default: [] }
 });
 
 const StatementRecord = mongoose.model('StatementRecord', StatementRecordSchema);
@@ -320,7 +322,9 @@ const UploadedFileSchema = new mongoose.Schema({
   filename: { type: String, required: true },
   originalName: { type: String, required: true },
   uploadDate: { type: String, required: true },
-  filePath: { type: String, required: true }
+  filePath: { type: String, required: true },
+  startDate: { type: String, default: "" },
+  endDate: { type: String, default: "" }
 });
 
 const UploadedFile = mongoose.model('UploadedFile', UploadedFileSchema);
@@ -1104,6 +1108,135 @@ function formatDateString(rawDate) {
   return null;
 }
 
+// Helper to highlight matched rows in green inside the Excel file
+async function updateExcelFileWithMatchedRows(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return;
+
+    let matchedRecords = [];
+    if (isUsingMongoDB) {
+      matchedRecords = await StatementRecord.find({ isMatched: true });
+    } else {
+      matchedRecords = readLocalStatements().filter(s => s.isMatched);
+    }
+
+    const matchedSet = new Set();
+    const getNormalizedDesc = (desc) => {
+      return String(desc || '').replace(/\s*\[Matched:.*\]$/, '').trim().toLowerCase();
+    };
+
+    for (const r of matchedRecords) {
+      const key = `${r.date}|${r.amount.toFixed(2)}|${getNormalizedDesc(r.description)}`;
+      matchedSet.add(key);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    workbook.eachSheet((worksheet) => {
+      let headerRowIndex = -1;
+      let colIndices = { date: -1, desc: -1, credit: -1, debit: -1, type: -1 };
+
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber <= 30 && headerRowIndex === -1) {
+          let hasDate = false, hasDesc = false, hasAmount = false;
+          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            const val = String(cell.value || '').toLowerCase().trim();
+            if (val.includes('date') || val === 'txn date' || val === 'value date') {
+              hasDate = true; colIndices.date = colNumber;
+            } else if (val.includes('description') || val.includes('particulars') || val.includes('narration') || val.includes('remarks') || val.includes('details')) {
+              hasDesc = true; colIndices.desc = colNumber;
+            } else if (val.includes('credit') || val === 'cr' || val.includes('deposit') || val === 'received' || val.includes('credited')) {
+              hasAmount = true; colIndices.credit = colNumber;
+            } else if (val.includes('debit') || val === 'dr' || val.includes('withdrawal') || val === 'paid' || val.includes('debited')) {
+              colIndices.debit = colNumber;
+            } else if (val === 'amount' || val === 'txn amount') {
+              hasAmount = true;
+              if (colIndices.credit === -1) colIndices.credit = colNumber;
+            } else if (val.includes('type') || val === 'cr/dr' || val === 'cr_dr') {
+              colIndices.type = colNumber;
+            }
+          });
+          if (hasDate && hasDesc && hasAmount) {
+            headerRowIndex = rowNumber;
+            return;
+          }
+        }
+
+        if (headerRowIndex !== -1 && rowNumber > headerRowIndex) {
+          const dateCell = colIndices.date !== -1 ? row.getCell(colIndices.date) : null;
+          const descCell = colIndices.desc !== -1 ? row.getCell(colIndices.desc) : null;
+          const creditCell = colIndices.credit !== -1 ? row.getCell(colIndices.credit) : null;
+          const debitCell = colIndices.debit !== -1 ? row.getCell(colIndices.debit) : null;
+          const typeCell = colIndices.type !== -1 ? row.getCell(colIndices.type) : null;
+
+          if (!dateCell || !descCell || !creditCell) return;
+
+          let rawDate = dateCell.value;
+          if (rawDate && typeof rawDate === 'object' && rawDate.result !== undefined) {
+            rawDate = rawDate.result;
+          }
+          let rawDesc = descCell.value;
+          if (rawDesc && typeof rawDesc === 'object' && rawDesc.result !== undefined) {
+            rawDesc = rawDesc.result;
+          }
+          let rawCredit = creditCell.value;
+          if (rawCredit && typeof rawCredit === 'object' && rawCredit.result !== undefined) {
+            rawCredit = rawCredit.result;
+          }
+
+          if (!rawDate || !rawDesc) return;
+
+          let creditAmt = parseFloat(String(rawCredit || '0').replace(/,/g, '')) || 0;
+          let debitAmt = debitCell ? (parseFloat(String(debitCell.value || '0').replace(/,/g, '')) || 0) : 0;
+
+          if (colIndices.type !== -1 && typeCell && typeCell.value) {
+            const typeStr = String(typeCell.value).toUpperCase().trim();
+            if (typeStr.includes('DR') || typeStr === 'D') {
+              debitAmt = creditAmt;
+              creditAmt = 0;
+            }
+          }
+
+          if (creditAmt > 0 && debitAmt === 0) {
+            const formattedDate = formatDateString(rawDate);
+            if (formattedDate) {
+              const key = `${formattedDate}|${creditAmt.toFixed(2)}|${getNormalizedDesc(rawDesc)}`;
+              if (matchedSet.has(key)) {
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFC6EFCE' }
+                  };
+                  cell.font = {
+                    ...(cell.font || {}),
+                    color: { argb: 'FF006100' },
+                    bold: true
+                  };
+                });
+              } else {
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                  if (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb === 'FFC6EFCE') {
+                    cell.fill = undefined;
+                    if (cell.font) {
+                      cell.font = { ...cell.font, color: undefined, bold: false };
+                    }
+                  }
+                });
+              }
+            }
+          }
+        }
+      });
+    });
+
+    await workbook.xlsx.writeFile(filePath);
+  } catch (error) {
+    console.error('Error updating Excel file with matched rows:', error);
+  }
+}
+
 // Main parser logic
 function parseExcelStatement(buffer) {
   const workbook = xlsx.read(buffer, { type: 'buffer' });
@@ -1220,13 +1353,23 @@ app.post('/api/statements/upload', upload.single('statement'), async (req, res) 
     const filePath = path.join(uploadsDir, filename);
     fs.writeFileSync(filePath, req.file.buffer);
 
+    // Parse records from the uploaded file buffer
+    const parsedRecords = parseExcelStatement(req.file.buffer);
+
+    // Calculate start date and end date from parsed records
+    const validDates = parsedRecords.map(r => r.date).filter(Boolean).sort();
+    const startDate = validDates.length > 0 ? validDates[0] : '';
+    const endDate = validDates.length > 0 ? validDates[validDates.length - 1] : '';
+
     // Save UploadedFile record
     const fileRecord = {
       id: require('crypto').randomUUID(),
       filename: filename,
       originalName: originalName,
       uploadDate: new Date().toISOString(),
-      filePath: filePath
+      filePath: filePath,
+      startDate: startDate,
+      endDate: endDate
     };
 
     if (isUsingMongoDB) {
@@ -1237,50 +1380,72 @@ app.post('/api/statements/upload', upload.single('statement'), async (req, res) 
       writeLocalUploadedFiles(files);
     }
 
-    // Parse records from the uploaded file buffer
-    const parsedRecords = parseExcelStatement(req.file.buffer);
-    
-    // Deduplication check
+    // Deduplication check & fileIds tracking
     const existing = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
     const getNormalizedDesc = (desc) => {
       return String(desc || '').replace(/\s*\[Matched:.*\]$/, '').trim().toLowerCase();
     };
 
     const statementsToSave = [];
+    const existingToUpdate = [];
+
     for (const r of parsedRecords) {
-      const isDuplicate = existing.some(ext =>
+      const extMatch = existing.find(ext =>
         ext.date === r.date &&
         Math.abs(ext.amount - r.amount) < 0.01 &&
         getNormalizedDesc(ext.description) === getNormalizedDesc(r.description)
       );
 
-      const isDuplicateInBatch = statementsToSave.some(batchItem =>
-        batchItem.date === r.date &&
-        Math.abs(batchItem.amount - r.amount) < 0.01 &&
-        getNormalizedDesc(batchItem.description) === getNormalizedDesc(r.description)
-      );
+      if (extMatch) {
+        let ids = Array.isArray(extMatch.fileIds) ? [...extMatch.fileIds] : [];
+        if (!ids.includes(fileRecord.id)) {
+          ids.push(fileRecord.id);
+          extMatch.fileIds = ids;
+          if (!existingToUpdate.some(item => item.id === extMatch.id)) {
+            existingToUpdate.push(extMatch);
+          }
+        }
+      } else {
+        const batchMatch = statementsToSave.find(batchItem =>
+          batchItem.date === r.date &&
+          Math.abs(batchItem.amount - r.amount) < 0.01 &&
+          getNormalizedDesc(batchItem.description) === getNormalizedDesc(r.description)
+        );
 
-      if (!isDuplicate && !isDuplicateInBatch) {
-        statementsToSave.push({
-          id: require('crypto').randomUUID(),
-          date: r.date,
-          description: r.description,
-          amount: r.amount,
-          isMatched: false,
-          matchedBookingId: '',
-          matchedPaymentId: ''
-        });
+        if (batchMatch) {
+          if (!batchMatch.fileIds.includes(fileRecord.id)) {
+            batchMatch.fileIds.push(fileRecord.id);
+          }
+        } else {
+          statementsToSave.push({
+            id: require('crypto').randomUUID(),
+            date: r.date,
+            description: r.description,
+            amount: r.amount,
+            isMatched: false,
+            matchedBookingId: '',
+            matchedPaymentId: '',
+            fileIds: [fileRecord.id]
+          });
+        }
       }
     }
 
-    if (statementsToSave.length > 0) {
-      if (isUsingMongoDB) {
+    if (isUsingMongoDB) {
+      if (statementsToSave.length > 0) {
         await StatementRecord.insertMany(statementsToSave);
-      } else {
-        const existingList = readLocalStatements();
-        const updated = [...existingList, ...statementsToSave];
-        writeLocalStatements(updated);
       }
+      for (const item of existingToUpdate) {
+        await StatementRecord.updateOne({ id: item.id }, { fileIds: item.fileIds });
+      }
+    } else {
+      const existingList = readLocalStatements();
+      for (const item of existingToUpdate) {
+        const idx = existingList.findIndex(s => s.id === item.id);
+        if (idx !== -1) existingList[idx].fileIds = item.fileIds;
+      }
+      const updated = [...existingList, ...statementsToSave];
+      writeLocalStatements(updated);
     }
 
     const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
@@ -1309,6 +1474,113 @@ app.get('/api/statements/files', async (req, res) => {
     res.json(files);
   } catch (error) {
     console.error('Error fetching uploaded files:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// View / Download Excel statement file with green-highlighted matched rows
+app.get('/api/statements/files/:id/view', async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    let file = null;
+    if (isUsingMongoDB) {
+      file = await UploadedFile.findOne({ id: fileId });
+    } else {
+      const files = readLocalUploadedFiles();
+      file = files.find(f => f.id === fileId);
+    }
+
+    if (!file || !fs.existsSync(file.filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Update Excel file with green rows for matched statement entries
+    await updateExcelFileWithMatchedRows(file.filePath);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+    res.sendFile(file.filePath);
+  } catch (error) {
+    console.error('Error viewing statement file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete specific statement file Endpoint
+app.delete('/api/statements/files/:id', async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    let fileToDelete = null;
+
+    if (isUsingMongoDB) {
+      fileToDelete = await UploadedFile.findOne({ id: fileId });
+    } else {
+      const files = readLocalUploadedFiles();
+      fileToDelete = files.find(f => f.id === fileId);
+    }
+
+    if (!fileToDelete) {
+      return res.status(404).json({ error: 'Statement file not found' });
+    }
+
+    // Delete physical file from disk
+    if (fs.existsSync(fileToDelete.filePath)) {
+      try {
+        fs.unlinkSync(fileToDelete.filePath);
+      } catch (e) {
+        console.error('Error deleting physical file:', e);
+      }
+    }
+
+    // Delete UploadedFile record
+    if (isUsingMongoDB) {
+      await UploadedFile.deleteOne({ id: fileId });
+    } else {
+      const files = readLocalUploadedFiles().filter(f => f.id !== fileId);
+      writeLocalUploadedFiles(files);
+    }
+
+    // Update StatementRecords: remove fileId reference
+    let allStatements = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    const recordsToDelete = [];
+    const recordsToUpdate = [];
+
+    for (let stmt of allStatements) {
+      let ids = Array.isArray(stmt.fileIds) ? [...stmt.fileIds] : [];
+      if (ids.includes(fileId)) {
+        ids = ids.filter(id => id !== fileId);
+        if (ids.length === 0) {
+          recordsToDelete.push(stmt.id);
+        } else {
+          stmt.fileIds = ids;
+          recordsToUpdate.push(stmt);
+        }
+      }
+    }
+
+    if (isUsingMongoDB) {
+      if (recordsToDelete.length > 0) {
+        await StatementRecord.deleteMany({ id: { $in: recordsToDelete } });
+      }
+      for (let stmt of recordsToUpdate) {
+        await StatementRecord.updateOne({ id: stmt.id }, { fileIds: stmt.fileIds });
+      }
+    } else {
+      let localList = readLocalStatements();
+      localList = localList.filter(s => !recordsToDelete.includes(s.id));
+      for (let stmt of recordsToUpdate) {
+        const idx = localList.findIndex(s => s.id === stmt.id);
+        if (idx !== -1) {
+          localList[idx].fileIds = stmt.fileIds;
+        }
+      }
+      writeLocalStatements(localList);
+    }
+
+    const remaining = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
+    res.json(remaining);
+  } catch (error) {
+    console.error('Error deleting statement file:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1440,6 +1712,12 @@ app.post('/api/statements/match', async (req, res) => {
 
     if (!isUsingMongoDB) {
       writeLocalStatements(updatedStatements);
+    }
+
+    // Update Excel files on disk so matched rows are styled green
+    const uploadedFilesList = isUsingMongoDB ? await UploadedFile.find() : readLocalUploadedFiles();
+    for (const fileItem of uploadedFilesList) {
+      await updateExcelFileWithMatchedRows(fileItem.filePath);
     }
 
     const all = isUsingMongoDB ? await StatementRecord.find() : readLocalStatements();
