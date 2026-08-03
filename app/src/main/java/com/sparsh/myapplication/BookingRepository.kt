@@ -206,6 +206,11 @@ class BookingRepository(context: Context) {
 
     suspend fun restoreBackupAndSync(id: String): List<Booking> = withContext(Dispatchers.IO) {
         api.restoreBackup(id)
+        try {
+            getPortalSettings()
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to sync portal settings after backup restore: ${e.message}")
+        }
         val remoteBookings = api.getBookings()
         saveAllLocalBookings(remoteBookings)
         remoteBookings.sortedByDescending { it.timestamp }
@@ -252,8 +257,16 @@ class BookingRepository(context: Context) {
             Log.d("BookingRepository", "Fetching portal settings from cloud...")
             val remoteSettings = api.getPortalSettings()
             Log.d("BookingRepository", "Fetched ${remoteSettings.size} portal settings from cloud. Updating cache.")
-            saveLocalPortalSettings(remoteSettings)
-            remoteSettings
+            val mergedSettings = getDefaultPortalSettings().map { defaultSetting ->
+                remoteSettings.find { it.platform.equals(defaultSetting.platform, ignoreCase = true) } ?: defaultSetting
+            }.toMutableList()
+            remoteSettings.forEach { remote ->
+                if (mergedSettings.none { it.platform.equals(remote.platform, ignoreCase = true) }) {
+                    mergedSettings.add(remote)
+                }
+            }
+            saveLocalPortalSettings(mergedSettings)
+            mergedSettings
         } catch (e: Exception) {
             Log.e("BookingRepository", "Cloud portal settings fetch failed: ${e.message}. Falling back to cache.")
             getLocalPortalSettings()

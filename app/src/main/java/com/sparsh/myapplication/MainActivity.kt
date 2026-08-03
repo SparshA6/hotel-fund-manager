@@ -87,6 +87,13 @@ class MainActivity : ComponentActivity() {
                     if (isLoggedIn) {
                         bookings.value = bookingRepository.getLocalBookings()
                         isLoading = true
+                        coroutineScope.launch {
+                            try {
+                                bookingRepository.getPortalSettings()
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                         bookings.value = bookingRepository.getBookings()
                         isLoading = false
                     }
@@ -226,6 +233,13 @@ class MainActivity : ComponentActivity() {
                                 onRefresh = {
                                     isLoading = true
                                     val delayJob = coroutineScope.launch { delay(1000) }
+                                    coroutineScope.launch {
+                                        try {
+                                            bookingRepository.getPortalSettings()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
                                     bookings.value = bookingRepository.getBookings()
                                     delayJob.join()
                                     isLoading = false

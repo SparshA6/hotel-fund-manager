@@ -286,7 +286,8 @@ const BackupSchema = new mongoose.Schema({
   timestamp: { type: Number, required: true },
   displayDate: { type: String, required: true },
   bookingCount: { type: Number, required: true },
-  bookings: { type: Array, default: [] }
+  bookings: { type: Array, default: [] },
+  portalSettings: { type: Array, default: [] }
 });
 
 const Backup = mongoose.model('Backup', BackupSchema);
@@ -550,10 +551,13 @@ app.post('/api/backups', async (req, res) => {
     const id = 'backup_' + timestamp;
 
     let bookings = [];
+    let portalSettings = [];
     if (isUsingMongoDB) {
       bookings = await Booking.find();
+      portalSettings = await PortalSettings.find();
     } else {
       bookings = readLocalBookings();
+      portalSettings = readLocalPortalSettings();
     }
 
     const backupData = {
@@ -561,19 +565,20 @@ app.post('/api/backups', async (req, res) => {
       timestamp,
       displayDate,
       bookingCount: bookings.length,
-      bookings: bookings
+      bookings: bookings,
+      portalSettings: portalSettings
     };
 
     if (isUsingMongoDB) {
       const newBackup = new Backup(backupData);
       await newBackup.save();
-      const { bookings: _, ...meta } = backupData;
+      const { bookings: _, portalSettings: __, ...meta } = backupData;
       res.json(meta);
     } else {
       const backups = readLocalBackups();
       backups.push(backupData);
       writeLocalBackups(backups);
-      const { bookings: _, ...meta } = backupData;
+      const { bookings: _, portalSettings: __, ...meta } = backupData;
       res.json(meta);
     }
   } catch (error) {
@@ -604,8 +609,15 @@ app.post('/api/backups/:id/restore', async (req, res) => {
       if (backupDoc.bookings && backupDoc.bookings.length > 0) {
         await Booking.insertMany(backupDoc.bookings);
       }
+      if (backupDoc.portalSettings && backupDoc.portalSettings.length > 0) {
+        await PortalSettings.deleteMany({});
+        await PortalSettings.insertMany(backupDoc.portalSettings);
+      }
     } else {
       writeLocalBookings(backupDoc.bookings || []);
+      if (backupDoc.portalSettings && backupDoc.portalSettings.length > 0) {
+        writeLocalPortalSettings(backupDoc.portalSettings);
+      }
     }
 
     res.json({ message: 'Backup restored successfully', bookingCount: backupDoc.bookingCount });
