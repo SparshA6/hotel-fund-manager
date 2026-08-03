@@ -26,12 +26,9 @@ class OtaCalculationStrategyTest {
         val breakdown = strategy.calculate(payableAmount, settings)
 
         // Mathematical derivations (Backtracking from 1828.0):
-        // denominator = (1 + 0.12) * (1 - 0.01 - 0.01) - 0.20 * (1 + 0.18)
-        //             = 1.12 * 0.98 - 0.20 * 1.18 = 1.0976 - 0.236 = 0.8616
-        // baseRate = round((1828.0 - 100 * (1 - 0.01 - 0.01)) / 0.8616)
-        //          = round((1828.0 - 98.0) / 0.8616) = round(1730.0 / 0.8616) = 2007.89
-        // Wait, to get baseRate of exactly 2000.0, let's trace the rounding of forward calculations:
-        // baseRate = 2000.0
+        // denominator = (1 + 0.12) - 0.20 * (1 + 0.18) - 0.01 - 0.01
+        //             = 1.12 - 0.236 - 0.02 = 0.864
+        // baseRate = (1828.0 - 100.0) / 0.864 = 1728.0 / 0.864 = 2000.0
         // propertyGst = round(2000 * 0.12) = 240.0
         // grossAmount = round(2000 + 240 + 100) = 2340.0
         // commission = round(2000 * 0.20) = 400.0
@@ -40,18 +37,16 @@ class OtaCalculationStrategyTest {
         // tds = round(2000 * 0.01) = 20.0
         // tcs = round(2000 * 0.01) = 20.0
         // payable = 2340.0 - 472.0 - 20.0 - 20.0 = 1828.0
-        // Thus, inputting 1828.0 backtracks back to ~2007.89 because of rounding step functions.
-        // Let's verify the exact assertions for payable = 1828.0:
         
-        assertEquals(2007.89, breakdown.baseRate, 0.01)
-        assertEquals(240.95, breakdown.propertyGst, 0.01)
-        assertEquals(2348.84, breakdown.grossAmount, 0.01)
-        assertEquals(401.58, breakdown.commission, 0.01)
-        assertEquals(72.28, breakdown.gstOnCommission, 0.01)
-        assertEquals(473.86, breakdown.totalCommission, 0.01)
-        assertEquals(20.08, breakdown.tds, 0.01)
-        assertEquals(20.08, breakdown.tcs, 0.01)
-        assertEquals(1834.82, breakdown.finalPayableAmount, 0.1) // Closest match allowing for rounding loss
+        assertEquals(2000.0, breakdown.baseRate, 0.001)
+        assertEquals(240.0, breakdown.propertyGst, 0.001)
+        assertEquals(2340.0, breakdown.grossAmount, 0.001)
+        assertEquals(400.0, breakdown.commission, 0.001)
+        assertEquals(72.0, breakdown.gstOnCommission, 0.001)
+        assertEquals(472.0, breakdown.totalCommission, 0.001)
+        assertEquals(20.0, breakdown.tds, 0.001)
+        assertEquals(20.0, breakdown.tcs, 0.001)
+        assertEquals(1828.0, breakdown.finalPayableAmount, 0.001)
     }
 
     @Test

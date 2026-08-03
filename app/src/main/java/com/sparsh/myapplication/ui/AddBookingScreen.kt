@@ -2124,7 +2124,7 @@ fun QuickBookDialog(
                                                     horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
                                                     Text("Payable to Hotel (Entered):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                    Text(formatMoney(breakdown.finalPayableAmount), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text(formatMoney(userPayable), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                                 }
                                                 
                                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))

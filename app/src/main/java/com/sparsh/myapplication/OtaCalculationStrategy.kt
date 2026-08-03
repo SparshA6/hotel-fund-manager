@@ -36,11 +36,11 @@ class MmtGoibiboCalculationStrategy : OtaCalculationStrategy {
         val tcsRate = settings.tcsRate / 100.0
         val s = settings.serviceCharge.toDouble()
 
-        // Solve: payableAmount = [B * (1 + gProp) + s] * (1 - tds - tcs) - B * c * (1 + gComm)
-        // payableAmount = B * [ (1 + gProp) * (1 - tds - tcs) - c * (1 + gComm) ] + s * (1 - tds - tcs)
-        val denominator = (1.0 + gProp) * (1.0 - tdsRate - tcsRate) - c * (1.0 + gComm)
+        // Solve: payableAmount = B * (1 + gProp) + s - B * c * (1 + gComm) - B * tds - B * tcs
+        // payableAmount = B * [ (1 + gProp) - c * (1 + gComm) - tds - tcs ] + s
+        val denominator = (1.0 + gProp) - c * (1.0 + gComm) - tdsRate - tcsRate
         val baseRate = if (denominator > 0.0) {
-            roundValue((payableAmount - s * (1.0 - tdsRate - tcsRate)) / denominator)
+            roundValue((payableAmount - s) / denominator)
         } else {
             payableAmount
         }
@@ -171,8 +171,9 @@ class DefaultCalculationStrategy : OtaCalculationStrategy {
         val tdsRate = settings.tdsRate / 100.0
         val tcsRate = settings.tcsRate / 100.0
 
-        // Solve: payableAmount = B * (1 + gProp) * (1 - tds - tcs) - B * c * (1 + gComm)
-        val denominator = (1.0 + gProp) * (1.0 - tdsRate - tcsRate) - c * (1.0 + gComm)
+        // Solve: payableAmount = B * (1 + gProp) - B * c * (1 + gComm) - B * tds - B * tcs
+        // payableAmount = B * [ (1 + gProp) - c * (1 + gComm) - tds - tcs ]
+        val denominator = (1.0 + gProp) - c * (1.0 + gComm) - tdsRate - tcsRate
         val baseRate = if (denominator > 0.0) {
             roundValue(payableAmount / denominator)
         } else {
