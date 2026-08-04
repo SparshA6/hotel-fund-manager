@@ -20,10 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.sparsh.myapplication.SettingsManager
 import com.sparsh.myapplication.BackupInfo
 import com.sparsh.myapplication.Booking
 import com.sparsh.myapplication.PortalSettings
+import com.sparsh.myapplication.EmailSettings
 import com.sparsh.myapplication.BookingRepository
 import kotlinx.coroutines.launch
 
@@ -56,12 +59,30 @@ fun SettingsScreen(
     var selectedPlatform by remember { mutableStateOf("MMT") }
     var portalSettingsList by remember { mutableStateOf(bookingRepository.getLocalPortalSettings()) }
 
+    var emailAddressStr by remember { mutableStateOf("hotelorangeclassic@gmail.com") }
+    var appPasswordStr by remember { mutableStateOf("woar uums ramq dkku") }
+    var imapHostStr by remember { mutableStateOf("imap.gmail.com") }
+    var imapPortStr by remember { mutableStateOf("993") }
+    var autoSyncEnabled by remember { mutableStateOf(true) }
+    var isSyncingEmails by remember { mutableStateOf(false) }
+    var emailSyncLog by remember { mutableStateOf("") }
+    var showRawEmailDialog by remember { mutableStateOf(false) }
+    var rawEmailSubject by remember { mutableStateOf("") }
+    var rawEmailBody by remember { mutableStateOf("") }
+
     LaunchedEffect(Unit) {
         isLoadingBackups = true
         try {
             backups = bookingRepository.getBackups()
             val remoteSettings = bookingRepository.getPortalSettings()
             portalSettingsList = remoteSettings
+            val fetchedEmailSettings = bookingRepository.getEmailSettings()
+            emailAddressStr = fetchedEmailSettings.email
+            appPasswordStr = fetchedEmailSettings.appPassword
+            imapHostStr = fetchedEmailSettings.host
+            imapPortStr = fetchedEmailSettings.port.toString()
+            autoSyncEnabled = fetchedEmailSettings.enabled
+            emailSyncLog = fetchedEmailSettings.lastSyncLog
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "Failed to load backups or settings: ${e.message}", Toast.LENGTH_LONG).show()
@@ -566,6 +587,163 @@ fun SettingsScreen(
                 }
             }
 
+            // 3. Automated Portal Email Monitoring Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Email,
+                                contentDescription = "Email Sync",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Portal Email Automation",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Text(
+                            text = "Monitors incoming OTA emails (MakeMyTrip, Goibibo, Booking.com, Agoda, Yatra, Cleartrip) to automatically add new upcoming bookings and remove cancellations.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Enable Email Monitoring", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Switch(
+                                checked = autoSyncEnabled,
+                                onCheckedChange = { autoSyncEnabled = it }
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = emailAddressStr,
+                            onValueChange = { emailAddressStr = it },
+                            label = { Text("Reservation Email") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = appPasswordStr,
+                            onValueChange = { appPasswordStr = it },
+                            label = { Text("App Password / Passcode") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = imapHostStr,
+                                onValueChange = { imapHostStr = it },
+                                label = { Text("IMAP Host") },
+                                modifier = Modifier.weight(1.5f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            OutlinedTextField(
+                                value = imapPortStr,
+                                onValueChange = { imapPortStr = it },
+                                label = { Text("Port") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                        }
+
+                        if (emailSyncLog.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Text(
+                                    text = "Status: $emailSyncLog",
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(10.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isSyncingEmails = true
+                                        try {
+                                            val settingsToSave = EmailSettings(
+                                                email = emailAddressStr.trim(),
+                                                appPassword = appPasswordStr.trim(),
+                                                host = imapHostStr.trim(),
+                                                port = imapPortStr.toIntOrNull() ?: 993,
+                                                enabled = autoSyncEnabled
+                                            )
+                                            bookingRepository.saveEmailSettings(settingsToSave)
+                                            val syncRes = bookingRepository.syncEmails()
+                                            emailSyncLog = syncRes.message
+                                            Toast.makeText(context, syncRes.message, Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            Toast.makeText(context, "Email sync failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isSyncingEmails = false
+                                        }
+                                    }
+                                },
+                                enabled = !isSyncingEmails,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isSyncingEmails) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
+                                } else {
+                                    Text("Sync Mails Now", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { showRawEmailDialog = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Test Email Text", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Save Button
             item {
                 Button(
@@ -742,6 +920,77 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showRawEmailDialog) {
+        var rawParseResult by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = {
+                showRawEmailDialog = false
+                rawEmailSubject = ""
+                rawEmailBody = ""
+                rawParseResult = ""
+            },
+            title = { Text("Test Email Text Parser", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Paste an email subject & body text below to test how the OTA parser handles it:", fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = rawEmailSubject,
+                        onValueChange = { rawEmailSubject = it },
+                        label = { Text("Email Subject") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = rawEmailBody,
+                        onValueChange = { rawEmailBody = it },
+                        label = { Text("Email Body Text") },
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        maxLines = 6
+                    )
+                    if (rawParseResult.isNotEmpty()) {
+                        Text(
+                            text = rawParseResult,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            try {
+                                val res = bookingRepository.parseRawEmail(rawEmailSubject, rawEmailBody)
+                                rawParseResult = "Result: ${res["parsed"] ?: res["result"] ?: res}"
+                            } catch (e: Exception) {
+                                rawParseResult = "Error: ${e.message}"
+                            }
+                        }
+                    }
+                ) {
+                    Text("Parse Text")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showRawEmailDialog = false
+                        rawEmailSubject = ""
+                        rawEmailBody = ""
+                        rawParseResult = ""
+                    }
+                ) {
+                    Text("Close")
                 }
             }
         )

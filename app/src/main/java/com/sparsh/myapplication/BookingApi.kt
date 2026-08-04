@@ -19,6 +19,28 @@ data class UploadGuestIdRequest(
     val index: Int
 )
 
+data class EmailSettings(
+    val email: String = "hotelorangeclassic@gmail.com",
+    val appPassword: String = "woar uums ramq dkku",
+    val host: String = "imap.gmail.com",
+    val port: Int = 993,
+    val enabled: Boolean = true,
+    val lastSyncTimestamp: Long = 0,
+    val lastSyncLog: String = ""
+)
+
+data class EmailSyncResult(
+    val message: String = "",
+    val addedCount: Int = 0,
+    val cancelledCount: Int = 0,
+    val logs: List<String> = emptyList()
+)
+
+data class RawEmailRequest(
+    val subject: String,
+    val body: String
+)
+
 interface BookingApi {
     @GET("api/bookings")
     suspend fun getBookings(): List<Booking>
@@ -68,6 +90,18 @@ interface BookingApi {
 
     @DELETE("api/backups/{id}")
     suspend fun deleteBackup(@Path("id") id: String): Response<Unit>
+
+    @GET("api/email-settings")
+    suspend fun getEmailSettings(): EmailSettings
+
+    @POST("api/email-settings")
+    suspend fun saveEmailSettings(@Body settings: EmailSettings): EmailSettings
+
+    @POST("api/email-sync")
+    suspend fun syncEmails(): EmailSyncResult
+
+    @POST("api/email-parse-raw")
+    suspend fun parseRawEmail(@Body request: RawEmailRequest): Map<String, Any>
 
     @Multipart
     @POST("api/statements/upload")

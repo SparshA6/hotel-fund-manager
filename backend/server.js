@@ -7,6 +7,7 @@ const { google } = require('googleapis');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const ExcelJS = require('exceljs');
+const { parseEmailContent, fetchEmailsFromIMAP } = require('./email_parser');
 require('dotenv').config();
 
 const app = express();
@@ -330,6 +331,64 @@ const UploadedFileSchema = new mongoose.Schema({
 
 const UploadedFile = mongoose.model('UploadedFile', UploadedFileSchema);
 
+const EmailSettingsSchema = new mongoose.Schema({
+  email: { type: String, default: "hotelorangeclassic@gmail.com" },
+  appPassword: { type: String, default: "woar uums ramq dkku" },
+  host: { type: String, default: "imap.gmail.com" },
+  port: { type: Number, default: 993 },
+  enabled: { type: Boolean, default: true },
+  lastSyncTimestamp: { type: Number, default: 0 },
+  lastSyncLog: { type: String, default: "Configured with hotelorangeclassic@gmail.com" }
+});
+
+const EmailSettings = mongoose.model('EmailSettings', EmailSettingsSchema);
+
+const EMAIL_SETTINGS_FILE_PATH = path.join(__dirname, 'email_settings.json');
+
+const DEFAULT_EMAIL_SETTINGS = {
+  email: "hotelorangeclassic@gmail.com",
+  appPassword: "woar uums ramq dkku",
+  host: "imap.gmail.com",
+  port: 993,
+  enabled: true,
+  lastSyncTimestamp: 0,
+  lastSyncLog: "Configured with hotelorangeclassic@gmail.com"
+};
+
+function readLocalEmailSettings() {
+  try {
+    if (!fs.existsSync(EMAIL_SETTINGS_FILE_PATH)) {
+      return DEFAULT_EMAIL_SETTINGS;
+    }
+    const data = fs.readFileSync(EMAIL_SETTINGS_FILE_PATH, 'utf8');
+    return { ...DEFAULT_EMAIL_SETTINGS, ...JSON.parse(data) };
+  } catch (error) {
+    console.error('Error reading local email settings file:', error);
+    return DEFAULT_EMAIL_SETTINGS;
+  }
+}
+
+function writeLocalEmailSettings(settings) {
+  try {
+    fs.writeFileSync(EMAIL_SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local email settings file:', error);
+  }
+}
+
+async function getOrSeedEmailSettings() {
+  if (isUsingMongoDB) {
+    let settings = await EmailSettings.findOne();
+    if (!settings) {
+      settings = new EmailSettings(DEFAULT_EMAIL_SETTINGS);
+      await settings.save();
+    }
+    return settings.toObject();
+  } else {
+    return readLocalEmailSettings();
+  }
+}
+
 const DEFAULT_PORTAL_SETTINGS = [
   { platform: "MMT", commissionRate: 20.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
   { platform: "Goibibo", commissionRate: 15.0, propertyGstRate: 12.0, gstOnCommissionRate: 18.0, tdsRate: 1.0, tcsRate: 1.0, paymentProcessingFeeRate: 0.0, serviceCharge: 0.0 },
@@ -403,6 +462,207 @@ app.post('/api/portal-settings', async (req, res) => {
     }
   } catch (error) {
     console.error('Error saving portal settings:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+async function processParsedEmail(parsed) {
+  if (!parsed || !parsed.action) return { processed: false, reason: "Unrecognized or non-OTA email format" };
+
+  const { action, platform, otaBookingId, guestName, checkInDate, checkOutDate, billAmount } = parsed;
+  let bookings = isUsingMongoDB ? await Booking.find() : readLocalBookings();
+
+  if (action === "CANCEL") {
+    let target = bookings.find(b => otaBookingId && b.notes && b.notes.includes(otaBookingId));
+    if (!target) {
+      target = bookings.find(b => 
+        b.platform.toLowerCase() === platform.toLowerCase() && 
+        b.guestName.toLowerCase().includes(guestName.toLowerCase())
+      );
+    }
+
+    if (target) {
+      if (isUsingMongoDB) {
+        await Booking.findOneAndDelete({ id: target.id });
+      } else {
+        bookings = bookings.filter(b => b.id !== target.id);
+        writeLocalBookings(bookings);
+      }
+      return { processed: true, action: "CANCELLED", bookingId: target.id, guestName: target.guestName, platform };
+    } else {
+      return { processed: false, reason: `Cancellation email for ${guestName} (${platform}), but no matching booking was found.` };
+    }
+  } else if (action === "NEW") {
+    let existing = bookings.find(b => otaBookingId && b.notes && b.notes.includes(otaBookingId));
+    if (!existing) {
+      existing = bookings.find(b => 
+        b.platform.toLowerCase() === platform.toLowerCase() &&
+        b.guestName.toLowerCase() === guestName.toLowerCase() &&
+        b.checkInDate === checkInDate
+      );
+    }
+
+    if (existing) {
+      return { processed: false, reason: `Booking for ${guestName} (${platform}) on ${checkInDate} already exists.` };
+    }
+
+    const newId = 'ota_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const newBooking = {
+      id: newId,
+      timestamp: Date.now(),
+      guestName: guestName || "OTA Guest",
+      platform: platform || "MMT",
+      checkInDate: checkInDate || new Date().toISOString().split('T')[0],
+      checkOutDate: checkOutDate || checkInDate,
+      billAmount: billAmount || 0.0,
+      customBillAmount: billAmount || 0.0,
+      discount: 0.0,
+      extraPrice: 0.0,
+      expenses: 0.0,
+      paymentStatus: "Pending",
+      paymentMethod: "Portal (Auto)",
+      paymentRemarks: "",
+      notes: otaBookingId ? `OTA Booking Ref: ${otaBookingId}` : "Auto-imported from portal email",
+      isAssigned: false,
+      items: [
+        {
+          id: 'item_' + Date.now(),
+          category: 'Deluxe',
+          roomNumber: 'Unassigned',
+          amount: billAmount || 0.0,
+          nights: 1,
+          rates: [billAmount || 0.0],
+          startDate: checkInDate || new Date().toISOString().split('T')[0]
+        }
+      ],
+      payments: [
+        {
+          id: 'portal_base',
+          amount: billAmount || 0.0,
+          method: 'Portal (Auto)',
+          timestamp: Date.now()
+        }
+      ],
+      guestIdCards: []
+    };
+
+    if (isUsingMongoDB) {
+      const doc = new Booking(newBooking);
+      await doc.save();
+    } else {
+      bookings.push(newBooking);
+      writeLocalBookings(bookings);
+    }
+
+    return { processed: true, action: "ADDED", bookingId: newId, guestName, platform, checkInDate };
+  }
+
+  return { processed: false, reason: "Unknown action" };
+}
+
+// 0.1 Email Settings & Sync Endpoints
+app.get('/api/email-settings', async (req, res) => {
+  try {
+    const settings = await getOrSeedEmailSettings();
+    res.json(settings);
+  } catch (error) {
+    console.error('Error fetching email settings:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/email-settings', async (req, res) => {
+  try {
+    const data = req.body;
+    if (isUsingMongoDB) {
+      const updated = await EmailSettings.findOneAndUpdate(
+        {},
+        data,
+        { new: true, upsert: true }
+      );
+      res.json(updated);
+    } else {
+      const existing = readLocalEmailSettings();
+      const updated = { ...existing, ...data };
+      writeLocalEmailSettings(updated);
+      res.json(updated);
+    }
+  } catch (error) {
+    console.error('Error saving email settings:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/email-sync', async (req, res) => {
+  try {
+    const config = await getOrSeedEmailSettings();
+    if (!config.enabled) {
+      return res.json({ message: "Email monitoring is disabled in settings.", addedCount: 0, cancelledCount: 0 });
+    }
+
+    console.log(`[Email Sync] Starting IMAP email fetch for ${config.email}...`);
+    const emails = await fetchEmailsFromIMAP(config);
+    console.log(`[Email Sync] Fetched ${emails.length} emails. Parsing content...`);
+
+    let addedCount = 0;
+    let cancelledCount = 0;
+    const logs = [];
+
+    for (let emailItem of emails) {
+      const parsed = parseEmailContent(emailItem.subject, emailItem.body);
+      if (parsed) {
+        const result = await processParsedEmail(parsed);
+        if (result.processed) {
+          if (result.action === "ADDED") {
+            addedCount++;
+            logs.push(`Added: ${result.guestName} (${result.platform}, Check-in: ${result.checkInDate})`);
+          } else if (result.action === "CANCELLED") {
+            cancelledCount++;
+            logs.push(`Cancelled: ${result.guestName} (${result.platform})`);
+          }
+        } else {
+          logs.push(`Skipped: ${result.reason}`);
+        }
+      }
+    }
+
+    const logSummary = `Synced ${emails.length} emails. Added ${addedCount} new booking(s), cancelled ${cancelledCount} booking(s).`;
+    const updateData = {
+      lastSyncTimestamp: Date.now(),
+      lastSyncLog: logSummary
+    };
+
+    if (isUsingMongoDB) {
+      await EmailSettings.findOneAndUpdate({}, updateData, { upsert: true });
+    } else {
+      const existing = readLocalEmailSettings();
+      writeLocalEmailSettings({ ...existing, ...updateData });
+    }
+
+    res.json({
+      message: logSummary,
+      addedCount,
+      cancelledCount,
+      logs
+    });
+  } catch (error) {
+    console.error('Error during email sync:', error);
+    res.status(500).json({ error: error.message || 'Error during email sync' });
+  }
+});
+
+app.post('/api/email-parse-raw', async (req, res) => {
+  try {
+    const { subject = "", body = "" } = req.body;
+    const parsed = parseEmailContent(subject, body);
+    if (!parsed) {
+      return res.json({ processed: false, reason: "Text could not be parsed as an OTA reservation email." });
+    }
+
+    const result = await processParsedEmail(parsed);
+    res.json({ parsed, result });
+  } catch (error) {
+    console.error('Error parsing raw email:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

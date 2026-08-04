@@ -331,6 +331,26 @@ class BookingRepository(context: Context) {
         api.clearStatements()
     }
 
+    suspend fun getEmailSettings(): EmailSettings = withContext(Dispatchers.IO) {
+        try {
+            api.getEmailSettings()
+        } catch (e: Exception) {
+            EmailSettings()
+        }
+    }
+
+    suspend fun saveEmailSettings(settings: EmailSettings): EmailSettings = withContext(Dispatchers.IO) {
+        api.saveEmailSettings(settings)
+    }
+
+    suspend fun syncEmails(): EmailSyncResult = withContext(Dispatchers.IO) {
+        api.syncEmails()
+    }
+
+    suspend fun parseRawEmail(subject: String, body: String): Map<String, Any> = withContext(Dispatchers.IO) {
+        api.parseRawEmail(RawEmailRequest(subject, body))
+    }
+
     companion object {
         private const val BASE_URL = "https://hotel-fund-manager.onrender.com/"
     }
