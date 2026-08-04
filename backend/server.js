@@ -514,6 +514,7 @@ async function processParsedEmail(parsed) {
       platform: platform || "MMT",
       checkInDate: checkInDate || new Date().toISOString().split('T')[0],
       checkOutDate: checkOutDate || checkInDate,
+      isBillOn: false,
       billAmount: billAmount || 0.0,
       customBillAmount: billAmount || 0.0,
       discount: 0.0,
