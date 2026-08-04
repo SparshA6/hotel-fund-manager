@@ -125,7 +125,11 @@ function parseEmailContent(subject = "", rawBody = "") {
   if (roomMatch) {
     const rawCategory = roomMatch[1].trim().split('\n')[0].trim();
     if (rawCategory.length > 2 && !/booking|hotel|check|total|amount/i.test(rawCategory)) {
-      roomCategory = rawCategory;
+      if (/dorm|dormitory/i.test(rawCategory)) {
+        roomCategory = "Dorm";
+      } else {
+        roomCategory = rawCategory;
+      }
     }
   } else {
     if (/dorm/i.test(combined)) roomCategory = "Dorm";
@@ -159,6 +163,48 @@ function parseEmailContent(subject = "", rawBody = "") {
     const parsedAmt = parseFloat(amountMatch[1].replace(/,/g, ''));
     if (!isNaN(parsedAmt) && parsedAmt > 0) {
       billAmount = parsedAmt;
+    }
+  }
+
+  // AGODA-SPECIFIC FORMAT OVERRIDES
+  if (platform === "Agoda") {
+    // Guest Name: Customer First Name + Customer Last Name
+    const firstNameMatch = combined.match(/Customer\s*First\s*Name:?\s*([A-Za-z\s.]+)/i);
+    const lastNameMatch = combined.match(/Customer\s*Last\s*Name:?\s*([A-Za-z\s.]+)/i);
+    if (firstNameMatch || lastNameMatch) {
+      const fn = firstNameMatch ? firstNameMatch[1].trim().split('\n')[0] : "";
+      const ln = lastNameMatch ? lastNameMatch[1].trim().split('\n')[0] : "";
+      const full = `${fn} ${ln}`.replace(/\s+/g, ' ').trim();
+      if (full.length > 1) {
+        guestName = full;
+      }
+    }
+
+    // Booking ID
+    const agodaIdMatch = combined.match(/Booking\s*ID:?\s*(\d{7,15})/i) || combined.match(/(\d{9,12})/);
+    if (agodaIdMatch) {
+      otaBookingId = agodaIdMatch[1].trim();
+    }
+
+    // Room Type
+    const agodaRoomMatch = combined.match(/Room\s*Type:?\s*([A-Za-z0-9\s-]{3,40})/i);
+    if (agodaRoomMatch) {
+      const rawType = agodaRoomMatch[1].trim().split('\n')[0].trim();
+      if (/dorm|dormitory/i.test(rawType)) {
+        roomCategory = "Dorm";
+      } else {
+        roomCategory = rawType;
+      }
+    }
+
+    // Dates
+    const agodaCheckIn = combined.match(/Check-in:?\s*([A-Za-z0-9\s,/-]{6,30})/i);
+    if (agodaCheckIn) {
+      checkInDate = normalizeDate(agodaCheckIn[1].trim().split('\n')[0]);
+    }
+    const agodaCheckOut = combined.match(/Check-out:?\s*([A-Za-z0-9\s,/-]{6,30})/i);
+    if (agodaCheckOut) {
+      checkOutDate = normalizeDate(agodaCheckOut[1].trim().split('\n')[0]);
     }
   }
 
