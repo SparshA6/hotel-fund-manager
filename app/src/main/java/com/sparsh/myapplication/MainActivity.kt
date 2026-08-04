@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
                     bookings.value
                 }
  
-                LaunchedEffect(currentTab, isLoggedIn) {
+                LaunchedEffect(isLoggedIn) {
                     if (isLoggedIn) {
                         bookings.value = bookingRepository.getLocalBookings()
                         isLoading = true
@@ -94,8 +94,13 @@ class MainActivity : ComponentActivity() {
                                 e.printStackTrace()
                             }
                         }
-                        bookings.value = bookingRepository.getBookings()
-                        isLoading = false
+                        try {
+                            bookings.value = bookingRepository.getBookings()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            isLoading = false
+                        }
                     }
                 }
  

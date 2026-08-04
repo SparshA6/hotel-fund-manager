@@ -10,13 +10,23 @@ import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 class BookingRepository(context: Context) {
     private val sharedPreferences: SharedPreferences =
         context.getSharedPreferences("hotel_fund_prefs", Context.MODE_PRIVATE)
 
     private val KEY_BOOKINGS = "key_bookings"
 
+    private val bookingsFetchMutex = Mutex()
+    private val settingsFetchMutex = Mutex()
+
     private val client = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val request = chain.request()
             val buffer = okio.Buffer()
@@ -45,15 +55,17 @@ class BookingRepository(context: Context) {
      * and falls back to local cache if offline or server is unavailable.
      */
     suspend fun getBookings(): List<Booking> = withContext(Dispatchers.IO) {
-        try {
-            Log.d("BookingRepository", "Fetching bookings from cloud...")
-            val remoteBookings = api.getBookings()
-            Log.d("BookingRepository", "Fetched ${remoteBookings.size} bookings from cloud. Updating cache.")
-            saveAllLocalBookings(remoteBookings)
-            remoteBookings.sortedByDescending { it.timestamp }
-        } catch (e: Exception) {
-            Log.e("BookingRepository", "Cloud fetch failed: ${e.message}. Falling back to cache.")
-            getLocalBookings()
+        bookingsFetchMutex.withLock {
+            try {
+                Log.d("BookingRepository", "Fetching bookings from cloud...")
+                val remoteBookings = api.getBookings()
+                Log.d("BookingRepository", "Fetched ${remoteBookings.size} bookings from cloud. Updating cache.")
+                saveAllLocalBookings(remoteBookings)
+                remoteBookings.sortedByDescending { it.timestamp }
+            } catch (e: Exception) {
+                Log.e("BookingRepository", "Cloud fetch failed: ${e.message}. Falling back to cache.")
+                getLocalBookings()
+            }
         }
     }
 
@@ -253,23 +265,25 @@ class BookingRepository(context: Context) {
     }
 
     suspend fun getPortalSettings(): List<PortalSettings> = withContext(Dispatchers.IO) {
-        try {
-            Log.d("BookingRepository", "Fetching portal settings from cloud...")
-            val remoteSettings = api.getPortalSettings()
-            Log.d("BookingRepository", "Fetched ${remoteSettings.size} portal settings from cloud. Updating cache.")
-            val mergedSettings = getDefaultPortalSettings().map { defaultSetting ->
-                remoteSettings.find { it.platform.equals(defaultSetting.platform, ignoreCase = true) } ?: defaultSetting
-            }.toMutableList()
-            remoteSettings.forEach { remote ->
-                if (mergedSettings.none { it.platform.equals(remote.platform, ignoreCase = true) }) {
-                    mergedSettings.add(remote)
+        settingsFetchMutex.withLock {
+            try {
+                Log.d("BookingRepository", "Fetching portal settings from cloud...")
+                val remoteSettings = api.getPortalSettings()
+                Log.d("BookingRepository", "Fetched ${remoteSettings.size} portal settings from cloud. Updating cache.")
+                val mergedSettings = getDefaultPortalSettings().map { defaultSetting ->
+                    remoteSettings.find { it.platform.equals(defaultSetting.platform, ignoreCase = true) } ?: defaultSetting
+                }.toMutableList()
+                remoteSettings.forEach { remote ->
+                    if (mergedSettings.none { it.platform.equals(remote.platform, ignoreCase = true) }) {
+                        mergedSettings.add(remote)
+                    }
                 }
+                saveLocalPortalSettings(mergedSettings)
+                mergedSettings
+            } catch (e: Exception) {
+                Log.e("BookingRepository", "Cloud portal settings fetch failed: ${e.message}. Falling back to cache.")
+                getLocalPortalSettings()
             }
-            saveLocalPortalSettings(mergedSettings)
-            mergedSettings
-        } catch (e: Exception) {
-            Log.e("BookingRepository", "Cloud portal settings fetch failed: ${e.message}. Falling back to cache.")
-            getLocalPortalSettings()
         }
     }
 
