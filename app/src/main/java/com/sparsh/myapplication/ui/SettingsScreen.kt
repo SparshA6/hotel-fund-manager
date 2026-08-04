@@ -712,6 +712,10 @@ fun SettingsScreen(
                                             bookingRepository.saveEmailSettings(settingsToSave)
                                             val syncRes = bookingRepository.syncEmails()
                                             emailSyncLog = syncRes.message
+                                            if (syncRes.addedCount > 0 || syncRes.cancelledCount > 0) {
+                                                val updatedList = bookingRepository.getBookings()
+                                                onRestored(updatedList)
+                                            }
                                             Toast.makeText(context, syncRes.message, Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
                                             e.printStackTrace()
