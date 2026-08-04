@@ -469,7 +469,7 @@ app.post('/api/portal-settings', async (req, res) => {
 async function processParsedEmail(parsed) {
   if (!parsed || !parsed.action) return { processed: false, reason: "Unrecognized or non-OTA email format" };
 
-  const { action, platform, otaBookingId, guestName, checkInDate, checkOutDate, billAmount } = parsed;
+  const { action, platform, otaBookingId, guestName, roomCategory, checkInDate, checkOutDate, billAmount } = parsed;
   let bookings = isUsingMongoDB ? await Booking.find() : readLocalBookings();
 
   if (action === "CANCEL") {
@@ -528,7 +528,7 @@ async function processParsedEmail(parsed) {
       items: [
         {
           id: 'item_' + Date.now(),
-          category: 'Deluxe',
+          category: roomCategory || 'Deluxe',
           roomNumber: 'Unassigned',
           amount: billAmount || 0.0,
           nights: 1,
