@@ -515,6 +515,7 @@ fun getPlatformColorsForUnassigned(platform: String): Pair<Color, Color> {
         "Goibibo" -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))
         "Yatra" -> Pair(Color(0xFFFCE4EC), Color(0xFF880E4F)) // Light Rose / Crimson
         "Cleartrip" -> Pair(Color(0xFFFFFDE7), Color(0xFFF57F17))
+        "Blocked" -> Pair(Color(0xFFECEFF1), Color(0xFF37474F))
         else -> Pair(Color(0xFFECEFF1), Color(0xFF263238))
     }
 }
@@ -534,6 +535,7 @@ fun AddUnassignedBookingDialog(
     }
     var checkInDate by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.checkInDate ?: currentDateStr) }
     var platform by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.platform ?: "Direct") }
+    var isBlockedMode by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.platform == "Blocked") }
     var notes by remember(bookingToEdit?.id) { mutableStateOf(bookingToEdit?.notes ?: "") }
     var discountStr by remember(bookingToEdit?.id) {
         mutableStateOf(if (bookingToEdit == null || bookingToEdit.discount == 0.0) "" else formatDouble(bookingToEdit.discount))
@@ -690,7 +692,64 @@ fun AddUnassignedBookingDialog(
                     .heightIn(max = 650.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Guest Name
+                // Booking Type Toggle Row
+                item {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(
+                            text = "Booking Type",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val types = listOf(Pair("Normal Booking", false), Pair("Blocked / Maintenance", true))
+                            types.forEach { (label, value) ->
+                                val isSel = isBlockedMode == value
+                                val bgColor = if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent
+                                val textColor = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(32.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(bgColor)
+                                        .clickable { 
+                                            isBlockedMode = value
+                                            if (value) {
+                                                platform = "Blocked"
+                                                isBillOn = false
+                                                billAmountStr = ""
+                                                discountStr = ""
+                                                extraPriceStr = ""
+                                                advancePaymentStr = ""
+                                                newPaymentAmountStr = ""
+                                                dialogPayments = emptyList()
+                                            } else {
+                                                platform = "Direct"
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = textColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Guest Name / Reason for Block
                 item {
                     OutlinedTextField(
                         value = guestName,
@@ -698,7 +757,7 @@ fun AddUnassignedBookingDialog(
                             guestName = it 
                             if (it.isNotBlank()) guestNameError = null
                         },
-                        label = { Text("Guest Name (Required)") },
+                        label = { Text(if (isBlockedMode) "Reason for Block" else "Guest Name (Required)") },
                         isError = guestNameError != null,
                         supportingText = guestNameError?.let { { Text(it) } },
                         modifier = Modifier.fillMaxWidth(),
@@ -744,49 +803,51 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Platform Selection
-                item {
-                    Column {
-                        Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
-                        platformsList.chunked(3).forEach { rowPlatforms ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                rowPlatforms.forEach { plat ->
-                                    val isSel = platform == plat
-                                    ElevatedCard(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(36.dp)
-                                            .clickable {
-                                                platform = plat
-                                                if (platform != "Direct") {
-                                                    isBillOn = false
-                                                    selectedAllocations = selectedAllocations.map { alloc ->
-                                                        val targetSize = if (samePriceForAllNights) 1 else bookingNights
-                                                        alloc.copy(
-                                                            nights = bookingNights,
-                                                            samePrice = samePriceForAllNights,
-                                                            rates = adjustRatesList(alloc.rates, targetSize),
-                                                            rate = if (samePriceForAllNights) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
-                                                        )
+                if (!isBlockedMode) {
+                    item {
+                        Column {
+                            Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
+                            platformsList.chunked(3).forEach { rowPlatforms ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowPlatforms.forEach { plat ->
+                                        val isSel = platform == plat
+                                        ElevatedCard(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .clickable {
+                                                    platform = plat
+                                                    if (platform != "Direct") {
+                                                        isBillOn = false
+                                                        selectedAllocations = selectedAllocations.map { alloc ->
+                                                            val targetSize = if (samePriceForAllNights) 1 else bookingNights
+                                                            alloc.copy(
+                                                                nights = bookingNights,
+                                                                samePrice = samePriceForAllNights,
+                                                                rates = adjustRatesList(alloc.rates, targetSize),
+                                                                rate = if (samePriceForAllNights) (alloc.rates.firstOrNull() ?: alloc.rate) else ""
+                                                            )
+                                                        }
                                                     }
-                                                }
-                                            },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                    ) {
-                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = plat,
-                                                fontSize = 11.sp,
-                                                color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontWeight = FontWeight.Bold
+                                                },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                                             )
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = plat,
+                                                    fontSize = 11.sp,
+                                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1797,17 +1858,22 @@ fun AddUnassignedBookingDialog(
                         hasError = true
                     }
                     val validAllocations = selectedAllocations.all { alloc ->
-                        val allocNights = if (platform == "Direct") alloc.nights else bookingNights
-                        val allocSamePrice = if (platform == "Direct") alloc.samePrice else samePriceForAllNights
-                        val ratesList = alloc.rates.map { it.toDoubleOrNull() ?: 0.0 }
-                        val bedsVal = if (alloc.category == "Dorm Bed") alloc.dormBedsCount else 1
-                        
-                        if (allocSamePrice) {
-                            val rateVal = alloc.rate.toDoubleOrNull() ?: 0.0
-                            rateVal > 0.0 && bedsVal > 0
+                        if (platform == "Blocked") {
+                            val bedsVal = if (alloc.category == "Dorm Bed") alloc.dormBedsCount else 1
+                            bedsVal > 0
                         } else {
-                            val hasInvalidRate = ratesList.any { it <= 0.0 } || ratesList.size < allocNights
-                            !hasInvalidRate && bedsVal > 0
+                            val allocNights = if (platform == "Direct") alloc.nights else bookingNights
+                            val allocSamePrice = if (platform == "Direct") alloc.samePrice else samePriceForAllNights
+                            val ratesList = alloc.rates.map { it.toDoubleOrNull() ?: 0.0 }
+                            val bedsVal = if (alloc.category == "Dorm Bed") alloc.dormBedsCount else 1
+                            
+                            if (allocSamePrice) {
+                                val rateVal = alloc.rate.toDoubleOrNull() ?: 0.0
+                                rateVal > 0.0 && bedsVal > 0
+                            } else {
+                                val hasInvalidRate = ratesList.any { it <= 0.0 } || ratesList.size < allocNights
+                                !hasInvalidRate && bedsVal > 0
+                            }
                         }
                     }
                     if (!validAllocations && selectedAllocations.isNotEmpty()) {
@@ -1819,13 +1885,15 @@ fun AddUnassignedBookingDialog(
 
                     // Build list of BookingItems
                     val itemsList = selectedAllocations.flatMap { alloc ->
-                        val allocNights = if (platform == "Direct") alloc.nights else bookingNights
-                        val allocSamePrice = if (platform == "Direct") alloc.samePrice else samePriceForAllNights
+                        val allocNights = if (platform == "Direct" || platform == "Blocked") alloc.nights else bookingNights
+                        val allocSamePrice = if (platform == "Direct" || platform == "Blocked") alloc.samePrice else samePriceForAllNights
                         val ratesList = alloc.rates.map { it.toDoubleOrNull() ?: 0.0 }
                         
                         if (alloc.category == "Dorm Bed") {
                             val beds = alloc.dormBedsCount.coerceAtLeast(1)
-                            val dormShareRatesList = if (allocSamePrice) {
+                            val dormShareRatesList = if (platform == "Blocked") {
+                                List(allocNights) { 0.0 }
+                            } else if (allocSamePrice) {
                                 val totalEntered = alloc.rate.toDoubleOrNull() ?: 0.0
                                 val ratePerBedPerNight = totalEntered / (allocNights.coerceAtLeast(1) * beds)
                                 List(allocNights) { ratePerBedPerNight }
@@ -1845,7 +1913,9 @@ fun AddUnassignedBookingDialog(
                                 )
                             }
                         } else {
-                            val ratesPerNight = if (allocSamePrice) {
+                            val ratesPerNight = if (platform == "Blocked") {
+                                List(allocNights) { 0.0 }
+                            } else if (allocSamePrice) {
                                 val ratePerNight = alloc.rate.toDoubleOrNull() ?: 0.0
                                 List(allocNights) { ratePerNight }
                             } else {
@@ -1872,17 +1942,21 @@ fun AddUnassignedBookingDialog(
 
                     val totalAmount = itemsList.sumOf { it.amount }
 
-                    val finalBillAmount = if (platform == "Direct" && isBillOn) {
+                    val finalBillAmount = if (platform == "Blocked") {
+                        0.0
+                    } else if (platform == "Direct" && isBillOn) {
                         billAmountStr.toDoubleOrNull() ?: totalAmount
                     } else {
                         totalAmount
                     }
 
-                    val discountVal = if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0
-                    val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+                    val discountVal = if (platform == "Blocked") 0.0 else (if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0)
+                    val extraPriceVal = if (platform == "Blocked") 0.0 else (extraPriceStr.toDoubleOrNull() ?: 0.0)
 
                     // Construct payments
-                    val finalPayments = if (platform != "Direct") {
+                    val finalPayments = if (platform == "Blocked") {
+                        emptyList<PaymentDetail>()
+                    } else if (platform != "Direct") {
                         val basePayment = PaymentDetail(
                             id = "portal_base",
                             amount = finalBillAmount - discountVal,
@@ -1923,7 +1997,7 @@ fun AddUnassignedBookingDialog(
                         initialPayments
                     }
 
-                    val finalCheckInDate = if (platform == "Direct") {
+                    val finalCheckInDate = if (platform == "Direct" || platform == "Blocked") {
                         selectedAllocations.map { it.startDate.takeIf { !it.isNullOrBlank() } ?: checkInDate }.minOrNull() ?: checkInDate
                     } else {
                         checkInDate
@@ -1933,13 +2007,13 @@ fun AddUnassignedBookingDialog(
                         guestIds = bookingToEdit?.guestIds ?: emptyList(),
                         checkInDate = finalCheckInDate,
                         platform = platform,
-                        guestName = guestName.trim(),
+                        guestName = if (platform == "Blocked" && guestName.trim().isEmpty()) "Room Blocked" else guestName.trim(),
                         items = itemsList,
                         dormBedsSelected = dormItems.size,
                         dormTotalAmount = dormTotalVal,
-                        isBillOn = if (platform == "Direct") isBillOn else true,
+                        isBillOn = if (platform == "Blocked") false else if (platform == "Direct") isBillOn else true,
                         billAmount = finalBillAmount,
-                        expenses = if (platform != "Direct") {
+                        expenses = if (platform != "Direct" && platform != "Blocked") {
                             val commBase = (finalBillAmount - discountVal).coerceAtLeast(0.0)
                             com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, platform, commBase).totalDeductions
                         } else {

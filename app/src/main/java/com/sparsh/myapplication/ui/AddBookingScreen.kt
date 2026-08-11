@@ -251,6 +251,7 @@ fun getPlatformColors(platform: String, isPending: Boolean): Pair<Color, Color> 
                 "Goibibo" -> Pair(Color(0xFFE65100), Color(0xFFFFCC80))     // Dark Orange
                 "Yatra" -> Pair(Color(0xFF880E4F), Color(0xFFF8BBD0))       // Dark Rose / Crimson
                 "Cleartrip" -> Pair(Color(0xFFF57F17), Color(0xFFFFE082))   // Dark Yellow
+                "Blocked" -> Pair(Color(0xFF37474F), Color(0xFFECEFF1))     // Blocked Room Slate-Grey
                 else -> Pair(Color(0xFF263238), Color(0xFFCFD8DC))          // Dark Grey
             }
         }
@@ -266,6 +267,7 @@ fun getPlatformColors(platform: String, isPending: Boolean): Pair<Color, Color> 
                 "Goibibo" -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))     // Light Orange
                 "Yatra" -> Pair(Color(0xFFFCE4EC), Color(0xFF880E4F))       // Light Rose / Crimson
                 "Cleartrip" -> Pair(Color(0xFFFFFDE7), Color(0xFFF57F17))   // Light Yellowow
+                "Blocked" -> Pair(Color(0xFFECEFF1), Color(0xFF37474F))     // Blocked Room Light Slate-Grey
                 else -> Pair(Color(0xFFECEFF1), Color(0xFF263238))          // Light Grey
             }
         }
@@ -617,12 +619,18 @@ fun AddBookingGridView(
                                                             } else {
                                                                 bookingItem.amount / (if (bookingItem.nights > 0) bookingItem.nights else 1)
                                                             }
+                                                            val textToDisplay = if (booking.platform.equals("Blocked", ignoreCase = true)) {
+                                                                if (booking.guestName.isNotBlank()) booking.guestName else "Blocked"
+                                                            } else {
+                                                                "₹${formatDouble(displayRate)}"
+                                                            }
                                                             Text(
-                                                                text = "₹${formatDouble(displayRate)}",
+                                                                text = textToDisplay,
                                                                 fontWeight = FontWeight.ExtraBold,
-                                                                fontSize = if (bookingsForCell.size > 1) 9.sp else 11.sp,
+                                                                fontSize = if (bookingsForCell.size > 1) 9.sp else 10.sp,
                                                                 color = colors.second,
-                                                                maxLines = 1
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
                                                             )
                                                         }
                                                     }
@@ -726,6 +734,7 @@ fun QuickBookDialog(
 ) {
     var guestName by remember { mutableStateOf("") }
     var platform by remember { mutableStateOf("Direct") }
+    var isBlockedMode by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
     var isBillOn by remember { mutableStateOf(false) }
     var billAmountStr by remember { mutableStateOf("") }
@@ -799,6 +808,7 @@ fun QuickBookDialog(
         if (bookingToEdit != null) {
             if (bookingToEdit.id != lastLoadedBookingId) {
                 lastLoadedBookingId = bookingToEdit.id
+            isBlockedMode = bookingToEdit.platform == "Blocked"
             guestName = bookingToEdit.guestName
             platform = bookingToEdit.platform
             isBillOn = bookingToEdit.isBillOn
@@ -908,6 +918,7 @@ fun QuickBookDialog(
         } else {
             lastLoadedBookingId = null
             // New booking
+            isBlockedMode = false
             guestName = ""
             platform = "Direct"
             isBillOn = false
@@ -1013,13 +1024,15 @@ fun QuickBookDialog(
                 )
                 // Content area (scrollable)
                 Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                val activeTabs = remember(platform, extraPriceStr, bookingToEdit) {
+                val activeTabs = remember(platform, extraPriceStr, bookingToEdit, isBlockedMode) {
                     val list = mutableListOf("Booking Info")
-                    if (platform == "Direct" || (extraPriceStr.toDoubleOrNull() ?: 0.0) > 0.0) {
-                        list.add("Payment Details")
-                    }
-                    if (bookingToEdit != null) {
-                        list.add("Guest IDs")
+                    if (!isBlockedMode) {
+                        if (platform == "Direct" || (extraPriceStr.toDoubleOrNull() ?: 0.0) > 0.0) {
+                            list.add("Payment Details")
+                        }
+                        if (bookingToEdit != null) {
+                            list.add("Guest IDs")
+                        }
                     }
                     list
                 }
@@ -1074,68 +1087,128 @@ fun QuickBookDialog(
                 ) {
                     if (tabTitle == "Booking Info") {
 
-                // Platform Selection
-                item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
-                        platformsList.chunked(3).forEach { rowPlatforms ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                rowPlatforms.forEach { plat ->
-                                    val isSel = platform == plat
-                                    ElevatedCard(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(36.dp)
-                                            .clickable {
-                                                platform = plat
-                                                if (platform != "Direct") {
-                                                    isBillOn = false
-                                                }
-                                            },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                    ) {
-                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        // Booking Type Toggle Row
+                        item {
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Text(
+                                    text = "Booking Type",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                        .padding(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val types = listOf(Pair("Normal Booking", false), Pair("Blocked / Maintenance", true))
+                                    types.forEach { (label, value) ->
+                                        val isSel = isBlockedMode == value
+                                        val bgColor = if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent
+                                        val textColor = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(bgColor)
+                                                .clickable { 
+                                                    isBlockedMode = value
+                                                    if (value) {
+                                                        platform = "Blocked"
+                                                        isBillOn = false
+                                                        billAmountStr = ""
+                                                        expensesStr = ""
+                                                        paymentStatus = "Blocked"
+                                                        paymentMethod = "N/A"
+                                                        dialogPayments = emptyList()
+                                                    } else {
+                                                        platform = "Direct"
+                                                        paymentStatus = "Paid"
+                                                        paymentMethod = "UPI (Hotel Acc - GPay)"
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
                                             Text(
-                                                text = plat,
-                                                fontSize = 11.sp,
-                                                color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                text = label,
                                                 fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                                fontSize = 12.sp,
+                                                color = textColor
                                             )
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                }
 
-                // Guest Name
-                item {
-                    OutlinedTextField(
-                        value = guestName,
-                        onValueChange = { 
-                            guestName = it 
-                            if (it.trim().isNotEmpty()) guestNameError = null
-                        },
-                        isError = guestNameError != null,
-                        supportingText = guestNameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                        label = { Text("Guest Name" + if (platform != "Direct" || isBillOn) " (Required)" else "") },
-                        placeholder = { Text("e.g. Amit Patel") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                }
+                        if (!isBlockedMode) {
+                            // Platform Selection
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("Platform", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    val platformsList = listOf("Direct", "MMT", "Booking.com", "Agoda", "Goibibo", "Yatra", "Cleartrip")
+                                    platformsList.chunked(3).forEach { rowPlatforms ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            rowPlatforms.forEach { plat ->
+                                                val isSel = platform == plat
+                                                ElevatedCard(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(36.dp)
+                                                        .clickable {
+                                                            platform = plat
+                                                            if (platform != "Direct") {
+                                                                isBillOn = false
+                                                            }
+                                                        },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                                    )
+                                                ) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = plat,
+                                                            fontSize = 11.sp,
+                                                            color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Guest Name / Reason for Block
+                        item {
+                            OutlinedTextField(
+                                value = guestName,
+                                onValueChange = { 
+                                    guestName = it 
+                                    if (it.trim().isNotEmpty()) guestNameError = null
+                                },
+                                isError = guestNameError != null,
+                                supportingText = guestNameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                label = { Text(if (isBlockedMode) "Reason for Block (e.g. Construction / Relatives)" else ("Guest Name" + if (platform != "Direct" || isBillOn) " (Required)" else "")) },
+                                placeholder = { Text(if (isBlockedMode) "e.g. Painting, Relatives visiting" else "e.g. Amit Patel") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                        }
 
                 // Global Nights & Same Price Toggle
                 if (platform != "Direct") {
@@ -3025,7 +3098,9 @@ fun QuickBookDialog(
                             val actualDormSamePrice = if (platform == "Direct") dormSamePrice else samePriceForAllNights
                             val dormRatesList = dormRates.take(actualDormNights).map { it.toDoubleOrNull() ?: 0.0 }
                             
-                            val dormShareRatesList = if (actualDormSamePrice) {
+                            val dormShareRatesList = if (platform == "Blocked") {
+                                List(actualDormNights) { 0.0 }
+                            } else if (actualDormSamePrice) {
                                 val totalEntered = dormRatesList.firstOrNull() ?: 0.0
                                 val ratePerBedPerNight = totalEntered / (actualDormNights.coerceAtLeast(1) * dormBedCount.coerceAtLeast(1))
                                 List(actualDormNights) { ratePerBedPerNight }
@@ -3052,15 +3127,17 @@ fun QuickBookDialog(
                                 emptyList()
                             }
 
-                             val portalSettings = if (platform != "Direct") bookingRepository.getPortalSettingsForPlatform(platform) else null
-                             val userPayable = if (platform != "Direct") (billAmountStr.toDoubleOrNull() ?: 0.0) else 0.0
-                             val breakdown = if (platform != "Direct" && portalSettings != null) {
+                             val portalSettings = if (platform != "Direct" && platform != "Blocked") bookingRepository.getPortalSettingsForPlatform(platform) else null
+                             val userPayable = if (platform != "Direct" && platform != "Blocked") (billAmountStr.toDoubleOrNull() ?: 0.0) else 0.0
+                             val breakdown = if (platform != "Direct" && platform != "Blocked" && portalSettings != null) {
                                  com.sparsh.myapplication.OtaCalculationEngine.calculate(platform, userPayable, portalSettings)
                              } else null
 
                              val roomBookingItems = dialogRoomItems.map { item ->
-                                 val itemNights = if (platform == "Direct") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
-                                 val ratesPerNight = if (platform == "Direct") {
+                                 val itemNights = if (platform == "Direct" || platform == "Blocked") (itemNightsMap[item.id] ?: bookingNights) else bookingNights
+                                 val ratesPerNight = if (platform == "Blocked") {
+                                     List(itemNights) { 0.0 }
+                                 } else if (platform == "Direct") {
                                      val itemSamePrice = itemSamePriceMap[item.id] ?: samePriceForAllNights
                                      val ratesList = (itemRatesMap[item.id] ?: listOf("")).take(itemNights).map { it.toDoubleOrNull() ?: 0.0 }
                                      if (itemSamePrice) {
@@ -3091,7 +3168,9 @@ fun QuickBookDialog(
                              val updatedItems = roomBookingItems + dormBookingItems
                              val calculatedSum = updatedItems.sumOf { it.amount }
 
-                             val finalBillAmount = if (platform == "Direct" && isBillOn) {
+                             val finalBillAmount = if (platform == "Blocked") {
+                                 0.0
+                             } else if (platform == "Direct" && isBillOn) {
                                  val customBill = billAmountStr.toDoubleOrNull()
                                  if (customBill == null || customBill <= 0.0) {
                                      customBillError = "Please enter a valid custom bill amount."
@@ -3115,12 +3194,18 @@ fun QuickBookDialog(
                              }
 
                              val discountVal = if (platform == "Direct") (discountStr.toDoubleOrNull() ?: 0.0) else 0.0
-                             val extraPriceVal = extraPriceStr.toDoubleOrNull() ?: 0.0
+                             val extraPriceVal = if (platform == "Blocked") 0.0 else (extraPriceStr.toDoubleOrNull() ?: 0.0)
 
                              val commissionVal = 0.0
 
                             // Create/Update Booking
-                            val finalGuestName = if (platform == "Direct" && !isBillOn && guestName.trim().isEmpty()) "Direct Guest" else guestName.trim()
+                            val finalGuestName = if (platform == "Blocked") {
+                                if (guestName.trim().isEmpty()) "Room Blocked" else guestName.trim()
+                            } else if (platform == "Direct" && !isBillOn && guestName.trim().isEmpty()) {
+                                "Direct Guest"
+                            } else {
+                                guestName.trim()
+                            }
 
                             val dormRoomABedsStr = if (hasDormBooking && dormRoom == "A") {
                                 if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
@@ -3130,7 +3215,9 @@ fun QuickBookDialog(
                                 if (manualBedNoToggle) manualBedNoText.trim() else parsedDormBeds.map { it.substring(1) }.joinToString(",")
                             } else ""
 
-                            val finalPayments = if (platform != "Direct") {
+                            val finalPayments = if (platform == "Blocked") {
+                                emptyList<PaymentDetail>()
+                            } else if (platform != "Direct") {
                                 val basePayment = PaymentDetail(
                                     id = "portal_base",
                                     amount = finalBillAmount - discountVal,
@@ -3171,7 +3258,7 @@ fun QuickBookDialog(
                                 dialogPayments
                             }
 
-                            val finalCheckInDate = if (platform == "Direct") {
+                            val finalCheckInDate = if (platform == "Direct" || platform == "Blocked") {
                                 updatedItems.map { it.startDate.takeIf { !it.isNullOrBlank() } ?: date }.minOrNull() ?: date
                             } else {
                                 date
@@ -3188,7 +3275,7 @@ fun QuickBookDialog(
                                 dormRoomABeds = dormRoomABedsStr,
                                 dormRoomBBeds = dormRoomBBedsStr,
                                 dormTotalAmount = totalDormVal,
-                                isBillOn = if (platform == "Direct") isBillOn else true,
+                                isBillOn = if (platform == "Blocked") false else if (platform == "Direct") isBillOn else true,
                                 billAmount = finalBillAmount,
                                 expenses = commissionVal,
                                 payments = finalPayments,
@@ -3300,29 +3387,30 @@ fun CellBookingsDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val isBlocked = booking.platform.equals("Blocked", ignoreCase = true)
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = booking.guestName,
+                                            text = if (isBlocked && booking.guestName.isBlank()) "Room Blocked" else booking.guestName,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
                                             color = colors.second
                                         )
                                         val nightsSuffix = if (bookingItem != null && bookingItem.nights > 1) " • ${bookingItem.nights} nights" else ""
                                         Text(
-                                            text = "${booking.platform} • ${booking.paymentMethod}$nightsSuffix",
+                                            text = if (isBlocked) "Blocked • Out of Service$nightsSuffix" else "${booking.platform} • ${booking.paymentMethod}$nightsSuffix",
                                             fontSize = 11.sp,
                                             color = colors.second.copy(alpha = 0.7f)
                                         )
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
-                                            text = "₹${formatDouble(displayRate)}",
+                                            text = if (isBlocked) "Blocked" else "₹${formatDouble(displayRate)}",
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 15.sp,
                                             color = colors.second
                                         )
                                         Text(
-                                            text = booking.paymentStatus,
+                                            text = if (isBlocked) "N/A" else booking.paymentStatus,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = colors.second.copy(alpha = 0.8f)

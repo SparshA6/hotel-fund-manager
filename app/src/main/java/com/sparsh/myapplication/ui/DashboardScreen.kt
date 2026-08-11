@@ -113,6 +113,9 @@ fun DashboardScreen(
 
     // Helper to compute a booking's financial contribution to the target period
     fun getBookingFinancialsForPeriod(b: Booking): Triple<Double, Double, Double> {
+        if (b.platform.equals("Blocked", ignoreCase = true)) {
+            return Triple(0.0, 0.0, 0.0)
+        }
         var periodGross = 0.0
         var periodExpense = 0.0
 
