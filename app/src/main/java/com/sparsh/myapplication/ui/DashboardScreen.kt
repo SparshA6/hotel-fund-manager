@@ -36,6 +36,7 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.window.DialogProperties
 
@@ -54,6 +55,7 @@ fun DashboardScreen(
     onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val pullToRefreshState = rememberPullToRefreshState()
     var selectedBookingForAssignment by remember { mutableStateOf<Booking?>(null) }
     var showPendingPaymentsReport by remember { mutableStateOf(false) }
@@ -114,11 +116,20 @@ fun DashboardScreen(
         var periodGross = 0.0
         var periodExpense = 0.0
 
+        val bookingExpense = if (b.expenses > 0.0) {
+            b.expenses
+        } else if (!b.platform.equals("Direct", ignoreCase = true)) {
+            val commBase = (b.amountCharged).coerceAtLeast(0.0)
+            com.sparsh.myapplication.SettingsManager.calculateBreakdown(context, b.platform, commBase).totalDeductions
+        } else {
+            0.0
+        }
+
         if (b.items.isEmpty()) {
             // Fallback for bookings without items (dorm legacy)
             if (datePredicate(b.checkInDate)) {
                 periodGross = b.amountCharged
-                periodExpense = b.expenses
+                periodExpense = bookingExpense
             }
         } else {
             val sumOfItemAmounts = b.items.sumOf { it.amount }.coerceAtLeast(1.0)
@@ -135,7 +146,7 @@ fun DashboardScreen(
                         val scaledGross = dailyRate * (b.amountCharged / sumOfItemAmounts)
                         
                         // Scale expense by rate proportion
-                        val scaledExpense = b.expenses * (dailyRate / sumOfItemAmounts)
+                        val scaledExpense = bookingExpense * (dailyRate / sumOfItemAmounts)
                         
                         periodGross += scaledGross
                         periodExpense += scaledExpense
@@ -200,6 +211,57 @@ fun DashboardScreen(
     }
     val maxPlatformRevenue = remember(platformRevenues) {
         platformRevenues.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    }
+
+    // Account summary breakdown based on payments in period
+    val standardAccounts = listOf(
+        "UPI (Hotel Acc - GPay)",
+        "UPI (Sparsh Acc - GPay)",
+        "UPI (Meenu - PhonePe)",
+        "UPI (Shop - HDFC)",
+        "Cash",
+        "Card",
+        "Bank Transfer"
+    )
+
+    data class AccountSummaryItem(
+        val name: String,
+        val amount: Double,
+        val count: Int
+    )
+
+    val accountSummaries = remember(bookings, datePredicate) {
+        val summaryMap = mutableMapOf<String, Pair<Double, Int>>()
+        
+        standardAccounts.forEach { acc ->
+            summaryMap[acc] = Pair(0.0, 0)
+        }
+
+        bookings.forEach { b ->
+            b.payments.forEach { p ->
+                val pDateStr = if (p.timestamp > 0) {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(p.timestamp))
+                } else {
+                    b.checkInDate
+                }
+                if (datePredicate(pDateStr)) {
+                    val method = if (p.method.isNotBlank()) p.method else "Other"
+                    val current = summaryMap.getOrDefault(method, Pair(0.0, 0))
+                    summaryMap[method] = Pair(current.first + p.amount, current.second + 1)
+                }
+            }
+        }
+
+        summaryMap.map { (name, data) -> AccountSummaryItem(name, data.first, data.second) }
+            .sortedWith(compareByDescending<AccountSummaryItem> { it.amount }.thenBy { standardAccounts.indexOf(it.name).let { idx -> if (idx == -1) 999 else idx } })
+    }
+
+    val totalAccountPaymentsAmount = remember(accountSummaries) {
+        accountSummaries.sumOf { it.amount }
+    }
+
+    val maxAccountAmount = remember(accountSummaries) {
+        accountSummaries.maxOfOrNull { it.amount }?.coerceAtLeast(1.0) ?: 1.0
     }
 
 
@@ -532,6 +594,137 @@ fun DashboardScreen(
                                                     shape = RoundedCornerShape(5.dp)
                                                 )
                                         )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Account Summary Breakdown Card
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Account Summary",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Payments received per account in period",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                ) {
+                                    Text(
+                                        text = currencyFormatter.format(totalAccountPaymentsAmount),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            if (accountSummaries.all { it.amount == 0.0 }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No payments recorded in this period",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                            } else {
+                                accountSummaries.filter { it.amount > 0.0 }.forEach { item ->
+                                    val fraction = (item.amount / maxAccountAmount).toFloat().coerceIn(0f, 1f)
+
+                                    val accountColor = when {
+                                        item.name.contains("Hotel Acc", ignoreCase = true) -> Color(0xFF1D4ED8) // Deep Blue
+                                        item.name.contains("Sparsh", ignoreCase = true) -> Color(0xFF0288D1) // Light Blue
+                                        item.name.contains("Meenu", ignoreCase = true) -> Color(0xFF7E22CE) // Purple
+                                        item.name.contains("Shop", ignoreCase = true) || item.name.contains("HDFC", ignoreCase = true) -> Color(0xFF0D9488) // Teal
+                                        item.name.equals("Cash", ignoreCase = true) -> Color(0xFF15803D) // Green
+                                        item.name.equals("Card", ignoreCase = true) -> Color(0xFFC2410C) // Orange
+                                        item.name.contains("Bank", ignoreCase = true) -> Color(0xFF4338CA) // Indigo
+                                        item.name.contains("Portal", ignoreCase = true) -> Color(0xFFD97706) // Amber
+                                        else -> MaterialTheme.colorScheme.secondary
+                                    }
+
+                                    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(10.dp)
+                                                        .background(accountColor, shape = RoundedCornerShape(5.dp))
+                                                )
+                                                Text(
+                                                    text = item.name,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
+                                            Text(
+                                                text = "${item.count} pmt${if (item.count > 1) "s" else ""} • ${currencyFormatter.format(item.amount)}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                )
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(fraction)
+                                                    .fillMaxHeight()
+                                                    .background(
+                                                        accountColor,
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                            )
+                                        }
                                     }
                                 }
                             }

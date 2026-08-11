@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -49,6 +50,7 @@ fun SettingsScreen(
 
     var backups by remember { mutableStateOf(listOf<BackupInfo>()) }
     var isLoadingBackups by remember { mutableStateOf(false) }
+    var showBackupsDialog by remember { mutableStateOf(false) }
     var isOperating by remember { mutableStateOf(false) }
     var operationMessage by remember { mutableStateOf("") }
 
@@ -456,24 +458,57 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Text(
+                            text = "Database Backups (Cloud)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            text = "Save a frozen copy of the database. You can restore older copies at any time. Restoring will overwrite the current live database state.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "Database Backups (Cloud)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            
-                            IconButton(
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isOperating = true
+                                        operationMessage = "Creating cloud backup..."
+                                        try {
+                                            bookingRepository.createBackup()
+                                            Toast.makeText(context, "Backup created successfully!", Toast.LENGTH_SHORT).show()
+                                            backups = bookingRepository.getBackups()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isOperating = false
+                                        }
+                                    }
+                                },
+                                enabled = !isOperating && !isLoadingBackups,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary
+                                )
+                            ) {
+                                Text("Create Backup", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            Button(
                                 onClick = {
                                     coroutineScope.launch {
                                         isLoadingBackups = true
                                         try {
                                             backups = bookingRepository.getBackups()
+                                            showBackupsDialog = true
                                         } catch (e: Exception) {
                                             e.printStackTrace()
                                             Toast.makeText(context, "Failed to load backups: ${e.message}", Toast.LENGTH_LONG).show()
@@ -482,105 +517,14 @@ fun SettingsScreen(
                                         }
                                     }
                                 },
-                                enabled = !isLoadingBackups && !isOperating
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh backups list",
-                                    tint = MaterialTheme.colorScheme.primary
+                                enabled = !isOperating && !isLoadingBackups,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
                                 )
-                            }
-                        }
-
-                        Text(
-                            text = "Save a frozen copy of the database. You can restore older copies at any time. Restoring will overwrite the current live database state.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    isOperating = true
-                                    operationMessage = "Creating cloud backup..."
-                                    try {
-                                        bookingRepository.createBackup()
-                                        Toast.makeText(context, "Backup created successfully!", Toast.LENGTH_SHORT).show()
-                                        backups = bookingRepository.getBackups()
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                        Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_LONG).show()
-                                    } finally {
-                                        isOperating = false
-                                    }
-                                }
-                            },
-                            enabled = !isOperating && !isLoadingBackups,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text("Create Cloud Backup", fontWeight = FontWeight.Bold)
-                        }
-
-                        if (isLoadingBackups) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            }
-                        } else if (backups.isEmpty()) {
-                            Text(
-                                text = "No backups available in the cloud.",
-                                fontSize = 12.sp,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        } else {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            ) {
-                                backups.forEach { backup ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(
-                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = backup.displayDate,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp
-                                            )
-                                            Text(
-                                                text = "${backup.bookingCount} bookings",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                            )
-                                        }
-
-                                        TextButton(
-                                            onClick = { showRestoreConfirmDialog = backup },
-                                            enabled = !isOperating,
-                                            colors = ButtonDefaults.textButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        ) {
-                                            Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
+                                Text("Restore Backup", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }
@@ -924,6 +868,139 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showBackupsDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackupsDialog = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Available Backups", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                isLoadingBackups = true
+                                try {
+                                    backups = bookingRepository.getBackups()
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    Toast.makeText(context, "Failed to load backups: ${e.message}", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    isLoadingBackups = false
+                                }
+                            }
+                        },
+                        enabled = !isLoadingBackups && !isOperating
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh list",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                ) {
+                    if (isLoadingBackups) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (backups.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No backups found on server.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontSize = 13.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(backups) { backup ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = backup.displayDate,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = "${backup.bookingCount} bookings",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                        )
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(
+                                            onClick = { 
+                                                showRestoreConfirmDialog = backup
+                                            },
+                                            enabled = !isOperating,
+                                            colors = ButtonDefaults.textButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        ) {
+                                            Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        IconButton(
+                                            onClick = { 
+                                                showDeleteConfirmDialog = backup
+                                            },
+                                            enabled = !isOperating,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete backup",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBackupsDialog = false }) {
+                    Text("Close")
                 }
             }
         )
