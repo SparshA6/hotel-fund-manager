@@ -311,7 +311,8 @@ const OtherPaymentSchema = new mongoose.Schema({
   method: { type: String, required: true },
   date: { type: String, required: true },
   reason: { type: String, default: "" },
-  timestamp: { type: Number, required: true }
+  timestamp: { type: Number, required: true },
+  isUnknown: { type: Boolean, default: false }
 });
 
 const OtherPayment = mongoose.model('OtherPayment', OtherPaymentSchema);

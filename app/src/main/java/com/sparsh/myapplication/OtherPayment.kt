@@ -9,7 +9,8 @@ data class OtherPayment(
     val method: String = "UPI (Hotel Acc - GPay)",
     val date: String = "", // yyyy-MM-dd
     val reason: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isUnknown: Boolean = false
 ) {
     fun toJsonObject(): JSONObject {
         val json = JSONObject()
@@ -19,18 +20,22 @@ data class OtherPayment(
         json.put("date", date)
         json.put("reason", reason)
         json.put("timestamp", timestamp)
+        json.put("isUnknown", isUnknown)
         return json
     }
 
     companion object {
         fun fromJsonObject(json: JSONObject): OtherPayment {
+            val methodVal = json.optString("method", "UPI (Hotel Acc - GPay)")
+            val unknownVal = json.optBoolean("isUnknown", methodVal.equals("Unknown", ignoreCase = true))
             return OtherPayment(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 amount = json.optDouble("amount", 0.0),
-                method = json.optString("method", "UPI (Hotel Acc - GPay)"),
+                method = methodVal,
                 date = json.optString("date", ""),
                 reason = json.optString("reason", ""),
-                timestamp = json.optLong("timestamp", System.currentTimeMillis())
+                timestamp = json.optLong("timestamp", System.currentTimeMillis()),
+                isUnknown = unknownVal
             )
         }
     }

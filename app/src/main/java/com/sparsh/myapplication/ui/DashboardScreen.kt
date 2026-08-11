@@ -1258,7 +1258,8 @@ fun OtherPaymentDialog(
     onSave: (OtherPayment) -> Unit
 ) {
     var amountStr by remember { mutableStateOf(initialPayment?.amount?.let { if (it == 0.0) "" else if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
-    var selectedMethod by remember { mutableStateOf(initialPayment?.method ?: standardAccounts.firstOrNull() ?: "UPI (Hotel Acc - GPay)") }
+    var isUnknown by remember { mutableStateOf(initialPayment?.isUnknown ?: (initialPayment?.method == "Unknown")) }
+    var selectedMethod by remember { mutableStateOf(if (initialPayment?.method == "Unknown") (standardAccounts.firstOrNull() ?: "UPI (Hotel Acc - GPay)") else (initialPayment?.method ?: standardAccounts.firstOrNull() ?: "UPI (Hotel Acc - GPay)")) }
     var selectedDate by remember { mutableStateOf(initialPayment?.date?.ifBlank { defaultDate } ?: defaultDate) }
     var reason by remember { mutableStateOf(initialPayment?.reason ?: "") }
     
@@ -1327,59 +1328,81 @@ fun OtherPaymentDialog(
                     singleLine = true
                 )
 
-                // Date Picker Input
-                OutlinedTextField(
-                    value = selectedDate,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Payment Date*") },
-                    trailingIcon = {
-                        IconButton(onClick = { showDatePicker = true }) {
-                            Icon(Icons.Default.DateRange, contentDescription = "Select Date")
-                        }
-                    },
-                    shape = RoundedCornerShape(10.dp),
+                // Unknown Checkbox
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    enabled = false,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-
-                // Account / CC Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = methodExpanded,
-                    onExpandedChange = { methodExpanded = !methodExpanded }
+                        .clickable { isUnknown = !isUnknown }
                 ) {
+                    Checkbox(
+                        checked = isUnknown,
+                        onCheckedChange = { isUnknown = it }
+                    )
+                    Text(
+                        text = "Unknown Payment (Date & Mode do not matter)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (!isUnknown) {
+                    // Date Picker Input
                     OutlinedTextField(
-                        value = selectedMethod,
+                        value = selectedDate,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Account / CC*") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = methodExpanded) },
+                        label = { Text("Payment Date*") },
+                        trailingIcon = {
+                            IconButton(onClick = { showDatePicker = true }) {
+                                Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+                            }
+                        },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            .fillMaxWidth()
+                            .clickable { showDatePicker = true },
+                        enabled = false,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                    ExposedDropdownMenu(
+
+                    // Account / CC Dropdown
+                    ExposedDropdownMenuBox(
                         expanded = methodExpanded,
-                        onDismissRequest = { methodExpanded = false }
+                        onExpandedChange = { methodExpanded = !methodExpanded }
                     ) {
-                        standardAccounts.forEach { acc ->
-                            DropdownMenuItem(
-                                text = { Text(acc) },
-                                onClick = {
-                                    selectedMethod = acc
-                                    methodExpanded = false
-                                }
-                            )
+                        OutlinedTextField(
+                            value = selectedMethod,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Account / CC*") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = methodExpanded) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = methodExpanded,
+                            onDismissRequest = { methodExpanded = false }
+                        ) {
+                            standardAccounts.forEach { acc ->
+                                DropdownMenuItem(
+                                    text = { Text(acc) },
+                                    onClick = {
+                                        selectedMethod = acc
+                                        methodExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1406,9 +1429,10 @@ fun OtherPaymentDialog(
                     }
                     val paymentToSave = (initialPayment ?: OtherPayment()).copy(
                         amount = amountVal,
-                        method = selectedMethod,
+                        method = if (isUnknown) "Unknown" else selectedMethod,
                         date = selectedDate,
-                        reason = reason.trim()
+                        reason = reason.trim(),
+                        isUnknown = isUnknown
                     )
                     onSave(paymentToSave)
                 },
