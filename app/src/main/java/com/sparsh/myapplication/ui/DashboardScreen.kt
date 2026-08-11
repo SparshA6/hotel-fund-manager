@@ -38,7 +38,16 @@ import java.util.Calendar
 import java.util.Locale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.sparsh.myapplication.OtherPayment
+import com.sparsh.myapplication.BookingRepository
+import kotlinx.coroutines.launch
 
 enum class ReportPeriod {
     TODAY,
@@ -56,6 +65,23 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val repository = remember { BookingRepository(context) }
+    val coroutineScope = rememberCoroutineScope()
+    var otherPayments by remember { mutableStateOf<List<OtherPayment>>(emptyList()) }
+    var showOtherPaymentDialog by remember { mutableStateOf(false) }
+    var editingOtherPayment by remember { mutableStateOf<OtherPayment?>(null) }
+
+    fun loadOtherPayments() {
+        coroutineScope.launch {
+            otherPayments = repository.getOtherPayments()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        otherPayments = repository.getLocalOtherPayments()
+        loadOtherPayments()
+    }
+
     val pullToRefreshState = rememberPullToRefreshState()
     var selectedBookingForAssignment by remember { mutableStateOf<Booking?>(null) }
     var showPendingPaymentsReport by remember { mutableStateOf(false) }
@@ -66,6 +92,7 @@ fun DashboardScreen(
     if (pullToRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             onRefresh()
+            loadOtherPayments()
             pullToRefreshState.endRefresh()
         }
     }
@@ -98,6 +125,15 @@ fun DashboardScreen(
             ReportPeriod.TODAY -> SimpleDateFormat("yyyy-MM-dd", Locale.US).format(targetCalendar.time)
             ReportPeriod.MONTHLY -> SimpleDateFormat("yyyy-MM", Locale.US).format(targetCalendar.time)
             ReportPeriod.YEARLY -> SimpleDateFormat("yyyy", Locale.US).format(targetCalendar.time)
+        }
+    }
+
+    val currentDateStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date()) }
+    val defaultOtherPaymentDate = remember(selectedPeriod, targetDateStr, currentDateStr) {
+        if (selectedPeriod == ReportPeriod.TODAY) {
+            targetDateStr
+        } else {
+            currentDateStr
         }
     }
 
@@ -177,13 +213,18 @@ fun DashboardScreen(
         }
     }
 
-    val periodFinancials = remember(bookings, datePredicate) {
+    val periodFinancials = remember(bookings, otherPayments, datePredicate) {
         var gross = 0.0
         var expense = 0.0
         bookings.forEach { b ->
             val financials = getBookingFinancialsForPeriod(b)
             gross += financials.first
             expense += financials.second
+        }
+        otherPayments.forEach { op ->
+            if (datePredicate(op.date)) {
+                gross += op.amount
+            }
         }
         Pair(gross, expense)
     }
@@ -233,7 +274,7 @@ fun DashboardScreen(
         val count: Int
     )
 
-    val accountSummaries = remember(bookings, datePredicate) {
+    val accountSummaries = remember(bookings, otherPayments, datePredicate) {
         val summaryMap = mutableMapOf<String, Pair<Double, Int>>()
         
         standardAccounts.forEach { acc ->
@@ -252,6 +293,14 @@ fun DashboardScreen(
                     val current = summaryMap.getOrDefault(method, Pair(0.0, 0))
                     summaryMap[method] = Pair(current.first + p.amount, current.second + 1)
                 }
+            }
+        }
+
+        otherPayments.forEach { op ->
+            if (datePredicate(op.date)) {
+                val method = if (op.method.isNotBlank()) op.method else "Other"
+                val current = summaryMap.getOrDefault(method, Pair(0.0, 0))
+                summaryMap[method] = Pair(current.first + op.amount, current.second + 1)
             }
         }
 
@@ -735,6 +784,157 @@ fun DashboardScreen(
                     }
                 }
 
+                // Other Payments Card
+                item {
+                    val activeOtherPayments = remember(otherPayments, datePredicate) {
+                        otherPayments.filter { datePredicate(it.date) }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Other Payments",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Non-booking payments & income",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        editingOtherPayment = null
+                                        showOtherPaymentDialog = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            if (activeOtherPayments.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No other payments recorded in this period",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                            } else {
+                                activeOtherPayments.forEachIndexed { index, payment ->
+                                    if (index > 0) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = payment.method,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = payment.date,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            if (payment.reason.isNotBlank()) {
+                                                Text(
+                                                    text = payment.reason,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = currencyFormatter.format(payment.amount),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF10B981)
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    editingOtherPayment = payment
+                                                    showOtherPaymentDialog = true
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Edit,
+                                                    contentDescription = "Edit",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        repository.deleteOtherPayment(payment.id)
+                                                        loadOtherPayments()
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Delete",
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Recent Bookings Header
                 item {
                     Row(
@@ -829,6 +1029,26 @@ fun DashboardScreen(
                     onConfirm = { updatedBooking ->
                         onEditBooking(updatedBooking)
                         selectedBookingForAssignment = null
+                    }
+                )
+            }
+
+            if (showOtherPaymentDialog) {
+                OtherPaymentDialog(
+                    initialPayment = editingOtherPayment,
+                    defaultDate = defaultOtherPaymentDate,
+                    standardAccounts = standardAccounts,
+                    onDismiss = {
+                        showOtherPaymentDialog = false
+                        editingOtherPayment = null
+                    },
+                    onSave = { paymentToSave ->
+                        coroutineScope.launch {
+                            repository.saveOtherPayment(paymentToSave)
+                            loadOtherPayments()
+                            showOtherPaymentDialog = false
+                            editingOtherPayment = null
+                        }
                     }
                 )
             }
@@ -1026,4 +1246,181 @@ private fun getBookingCheckoutDate(booking: Booking): String {
         val nights = if (item.nights > 0) item.nights else 1
         getStayDate(itemStart, nights)
     }.maxOrNull() ?: getStayDate(booking.checkInDate, 1)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OtherPaymentDialog(
+    initialPayment: OtherPayment?,
+    defaultDate: String,
+    standardAccounts: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (OtherPayment) -> Unit
+) {
+    var amountStr by remember { mutableStateOf(initialPayment?.amount?.let { if (it == 0.0) "" else if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
+    var selectedMethod by remember { mutableStateOf(initialPayment?.method ?: standardAccounts.firstOrNull() ?: "UPI (Hotel Acc - GPay)") }
+    var selectedDate by remember { mutableStateOf(initialPayment?.date?.ifBlank { defaultDate } ?: defaultDate) }
+    var reason by remember { mutableStateOf(initialPayment?.reason ?: "") }
+    
+    var showDatePicker by remember { mutableStateOf(false) }
+    var methodExpanded by remember { mutableStateOf(false) }
+    var amountError by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+
+    if (showDatePicker) {
+        val cal = Calendar.getInstance()
+        if (selectedDate.isNotBlank()) {
+            try {
+                val parts = selectedDate.split("-")
+                if (parts.size == 3) {
+                    cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                selectedDate = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                showDatePicker = false
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            setOnDismissListener { showDatePicker = false }
+            show()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (initialPayment == null) "Add Other Payment" else "Edit Other Payment",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Price Input
+                OutlinedTextField(
+                    value = amountStr,
+                    onValueChange = {
+                        amountStr = it
+                        amountError = null
+                    },
+                    label = { Text("Amount / Price (₹)*") },
+                    placeholder = { Text("e.g. 1500") },
+                    prefix = { Text("₹ ") },
+                    isError = amountError != null,
+                    supportingText = amountError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                // Date Picker Input
+                OutlinedTextField(
+                    value = selectedDate,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Payment Date*") },
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "Select Date")
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true },
+                    enabled = false,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Account / CC Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = methodExpanded,
+                    onExpandedChange = { methodExpanded = !methodExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedMethod,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Account / CC*") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = methodExpanded) },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = methodExpanded,
+                        onDismissRequest = { methodExpanded = false }
+                    ) {
+                        standardAccounts.forEach { acc ->
+                            DropdownMenuItem(
+                                text = { Text(acc) },
+                                onClick = {
+                                    selectedMethod = acc
+                                    methodExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Reason / Notes Input (can be empty)
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Reason / Remarks (Optional)") },
+                    placeholder = { Text("e.g. Laundry sales, Shop item, etc.") },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val amountVal = amountStr.toDoubleOrNull()
+                    if (amountVal == null || amountVal <= 0.0) {
+                        amountError = "Please enter a valid positive amount"
+                        return@Button
+                    }
+                    val paymentToSave = (initialPayment ?: OtherPayment()).copy(
+                        amount = amountVal,
+                        method = selectedMethod,
+                        date = selectedDate,
+                        reason = reason.trim()
+                    )
+                    onSave(paymentToSave)
+                },
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(if (initialPayment == null) "Add Payment" else "Save Changes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

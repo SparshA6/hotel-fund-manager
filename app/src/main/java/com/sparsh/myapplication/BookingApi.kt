@@ -103,6 +103,15 @@ interface BookingApi {
     @POST("api/email-parse-raw")
     suspend fun parseRawEmail(@Body request: RawEmailRequest): Map<String, Any>
 
+    @GET("api/other-payments")
+    suspend fun getOtherPayments(): List<OtherPayment>
+
+    @POST("api/other-payments")
+    suspend fun saveOtherPayment(@Body payment: OtherPayment): OtherPayment
+
+    @DELETE("api/other-payments/{id}")
+    suspend fun deleteOtherPayment(@Path("id") id: String): Response<Unit>
+
     @Multipart
     @POST("api/statements/upload")
     suspend fun uploadStatement(@Part file: okhttp3.MultipartBody.Part): List<StatementRecord>

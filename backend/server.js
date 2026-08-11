@@ -59,6 +59,29 @@ function writeLocalBookings(bookings) {
   }
 }
 
+const OTHER_PAYMENTS_FILE_PATH = path.join(__dirname, 'other_payments.json');
+
+function readLocalOtherPayments() {
+  try {
+    if (!fs.existsSync(OTHER_PAYMENTS_FILE_PATH)) {
+      return [];
+    }
+    const data = fs.readFileSync(OTHER_PAYMENTS_FILE_PATH, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading local other payments file:', error);
+    return [];
+  }
+}
+
+function writeLocalOtherPayments(payments) {
+  try {
+    fs.writeFileSync(OTHER_PAYMENTS_FILE_PATH, JSON.stringify(payments, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error writing local other payments file:', error);
+  }
+}
+
 const BACKUPS_FILE_PATH = path.join(__dirname, 'backups.json');
 
 function readLocalBackups() {
@@ -282,13 +305,25 @@ const BookingSchema = new mongoose.Schema({
 
 const Booking = mongoose.model('Booking', BookingSchema);
 
+const OtherPaymentSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  amount: { type: Number, required: true },
+  method: { type: String, required: true },
+  date: { type: String, required: true },
+  reason: { type: String, default: "" },
+  timestamp: { type: Number, required: true }
+});
+
+const OtherPayment = mongoose.model('OtherPayment', OtherPaymentSchema);
+
 const BackupSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   timestamp: { type: Number, required: true },
   displayDate: { type: String, required: true },
   bookingCount: { type: Number, required: true },
   bookings: { type: Array, default: [] },
-  portalSettings: { type: Array, default: [] }
+  portalSettings: { type: Array, default: [] },
+  otherPayments: { type: Array, default: [] }
 });
 
 const Backup = mongoose.model('Backup', BackupSchema);
@@ -787,12 +822,12 @@ app.delete('/api/bookings/:id', async (req, res) => {
 app.get('/api/backups', async (req, res) => {
   try {
     if (isUsingMongoDB) {
-      const backups = await Backup.find({}, { bookings: 0 }).sort({ timestamp: -1 });
+      const backups = await Backup.find({}, { bookings: 0, portalSettings: 0, otherPayments: 0 }).sort({ timestamp: -1 });
       res.json(backups);
     } else {
       const backups = readLocalBackups();
       const metadata = backups.map(b => {
-        const { bookings, ...meta } = b;
+        const { bookings, portalSettings, otherPayments, ...meta } = b;
         return meta;
       });
       metadata.sort((a, b) => b.timestamp - a.timestamp);
@@ -813,12 +848,15 @@ app.post('/api/backups', async (req, res) => {
 
     let bookings = [];
     let portalSettings = [];
+    let otherPayments = [];
     if (isUsingMongoDB) {
       bookings = await Booking.find();
       portalSettings = await PortalSettings.find();
+      otherPayments = await OtherPayment.find();
     } else {
       bookings = readLocalBookings();
       portalSettings = readLocalPortalSettings();
+      otherPayments = readLocalOtherPayments();
     }
 
     const backupData = {
@@ -827,19 +865,20 @@ app.post('/api/backups', async (req, res) => {
       displayDate,
       bookingCount: bookings.length,
       bookings: bookings,
-      portalSettings: portalSettings
+      portalSettings: portalSettings,
+      otherPayments: otherPayments
     };
 
     if (isUsingMongoDB) {
       const newBackup = new Backup(backupData);
       await newBackup.save();
-      const { bookings: _, portalSettings: __, ...meta } = backupData;
+      const { bookings: _, portalSettings: __, otherPayments: ___, ...meta } = backupData;
       res.json(meta);
     } else {
       const backups = readLocalBackups();
       backups.push(backupData);
       writeLocalBackups(backups);
-      const { bookings: _, portalSettings: __, ...meta } = backupData;
+      const { bookings: _, portalSettings: __, otherPayments: ___, ...meta } = backupData;
       res.json(meta);
     }
   } catch (error) {
@@ -874,16 +913,98 @@ app.post('/api/backups/:id/restore', async (req, res) => {
         await PortalSettings.deleteMany({});
         await PortalSettings.insertMany(backupDoc.portalSettings);
       }
+      await OtherPayment.deleteMany({});
+      if (backupDoc.otherPayments && backupDoc.otherPayments.length > 0) {
+        await OtherPayment.insertMany(backupDoc.otherPayments);
+      }
     } else {
       writeLocalBookings(backupDoc.bookings || []);
       if (backupDoc.portalSettings && backupDoc.portalSettings.length > 0) {
         writeLocalPortalSettings(backupDoc.portalSettings);
       }
+      writeLocalOtherPayments(backupDoc.otherPayments || []);
     }
 
     res.json({ message: 'Backup restored successfully', bookingCount: backupDoc.bookingCount });
   } catch (error) {
     console.error('Error restoring backup:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Other Payments Endpoints
+
+// 1. Get all other payments
+app.get('/api/other-payments', async (req, res) => {
+  try {
+    if (isUsingMongoDB) {
+      const payments = await OtherPayment.find().sort({ timestamp: -1 });
+      res.json(payments);
+    } else {
+      const payments = readLocalOtherPayments();
+      payments.sort((a, b) => b.timestamp - a.timestamp);
+      res.json(payments);
+    }
+  } catch (error) {
+    console.error('Error fetching other payments:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 2. Save or update an other payment
+app.post('/api/other-payments', async (req, res) => {
+  try {
+    const paymentData = req.body;
+    if (!paymentData.id || paymentData.amount === undefined || !paymentData.method || !paymentData.date) {
+      return res.status(400).json({ error: 'Missing required fields (id, amount, method, date)' });
+    }
+
+    if (isUsingMongoDB) {
+      const updatedPayment = await OtherPayment.findOneAndUpdate(
+        { id: paymentData.id },
+        paymentData,
+        { new: true, upsert: true, runValidators: true }
+      );
+      res.json(updatedPayment);
+    } else {
+      const payments = readLocalOtherPayments();
+      const index = payments.findIndex(p => p.id === paymentData.id);
+      if (index !== -1) {
+        payments[index] = paymentData;
+      } else {
+        payments.push(paymentData);
+      }
+      writeLocalOtherPayments(payments);
+      res.json(paymentData);
+    }
+  } catch (error) {
+    console.error('Error saving other payment:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// 3. Delete an other payment
+app.delete('/api/other-payments/:id', async (req, res) => {
+  try {
+    const paymentId = req.params.id;
+
+    if (isUsingMongoDB) {
+      const result = await OtherPayment.findOneAndDelete({ id: paymentId });
+      if (!result) {
+        return res.status(404).json({ error: 'Other payment not found' });
+      }
+      res.json({ message: 'Other payment deleted successfully', id: paymentId });
+    } else {
+      const payments = readLocalOtherPayments();
+      const filtered = payments.filter(p => p.id !== paymentId);
+      if (payments.length === filtered.length) {
+        return res.status(404).json({ error: 'Other payment not found' });
+      }
+      writeLocalOtherPayments(filtered);
+      res.json({ message: 'Other payment deleted successfully', id: paymentId });
+    }
+  } catch (error) {
+    console.error('Error deleting other payment:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

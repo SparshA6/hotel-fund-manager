@@ -223,6 +223,12 @@ class BookingRepository(context: Context) {
         } catch (e: Exception) {
             Log.e("BookingRepository", "Failed to sync portal settings after backup restore: ${e.message}")
         }
+        try {
+            val remoteOtherPayments = api.getOtherPayments()
+            saveAllLocalOtherPayments(remoteOtherPayments)
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to sync other payments after backup restore: ${e.message}")
+        }
         val remoteBookings = api.getBookings()
         saveAllLocalBookings(remoteBookings)
         remoteBookings.sortedByDescending { it.timestamp }
@@ -349,6 +355,74 @@ class BookingRepository(context: Context) {
 
     suspend fun parseRawEmail(subject: String, body: String): Map<String, Any> = withContext(Dispatchers.IO) {
         api.parseRawEmail(RawEmailRequest(subject, body))
+    }
+
+    private val KEY_OTHER_PAYMENTS = "key_other_payments"
+    private val otherPaymentsFetchMutex = Mutex()
+
+    suspend fun getOtherPayments(): List<OtherPayment> = withContext(Dispatchers.IO) {
+        otherPaymentsFetchMutex.withLock {
+            try {
+                Log.d("BookingRepository", "Fetching other payments from cloud...")
+                val remotePayments = api.getOtherPayments()
+                Log.d("BookingRepository", "Fetched ${remotePayments.size} other payments from cloud. Updating cache.")
+                saveAllLocalOtherPayments(remotePayments)
+                remotePayments.sortedByDescending { it.timestamp }
+            } catch (e: Exception) {
+                Log.e("BookingRepository", "Cloud other payments fetch failed: ${e.message}. Falling back to cache.")
+                getLocalOtherPayments()
+            }
+        }
+    }
+
+    suspend fun saveOtherPayment(payment: OtherPayment) = withContext(Dispatchers.IO) {
+        val localPayments = getLocalOtherPayments().toMutableList()
+        localPayments.removeAll { it.id == payment.id }
+        localPayments.add(payment)
+        saveAllLocalOtherPayments(localPayments)
+
+        try {
+            Log.d("BookingRepository", "Saving other payment ${payment.id} to cloud...")
+            api.saveOtherPayment(payment)
+            Log.d("BookingRepository", "Saved other payment to cloud successfully.")
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to save other payment to cloud: ${e.message}. Saved locally.")
+        }
+    }
+
+    suspend fun deleteOtherPayment(id: String) = withContext(Dispatchers.IO) {
+        val localPayments = getLocalOtherPayments().toMutableList()
+        localPayments.removeAll { it.id == id }
+        saveAllLocalOtherPayments(localPayments)
+
+        try {
+            Log.d("BookingRepository", "Deleting other payment $id from cloud...")
+            api.deleteOtherPayment(id)
+            Log.d("BookingRepository", "Deleted other payment from cloud successfully.")
+        } catch (e: Exception) {
+            Log.e("BookingRepository", "Failed to delete other payment from cloud: ${e.message}. Deleted locally.")
+        }
+    }
+
+    fun getLocalOtherPayments(): List<OtherPayment> {
+        val jsonString = sharedPreferences.getString(KEY_OTHER_PAYMENTS, null) ?: return emptyList()
+        return try {
+            val jsonArray = JSONArray(jsonString)
+            val list = mutableListOf<OtherPayment>()
+            for (i in 0 until jsonArray.length()) {
+                list.add(OtherPayment.fromJsonObject(jsonArray.getJSONObject(i)))
+            }
+            list.sortedByDescending { it.timestamp }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    private fun saveAllLocalOtherPayments(payments: List<OtherPayment>) {
+        val jsonArray = JSONArray()
+        payments.forEach { jsonArray.put(it.toJsonObject()) }
+        sharedPreferences.edit().putString(KEY_OTHER_PAYMENTS, jsonArray.toString()).apply()
     }
 
     companion object {
