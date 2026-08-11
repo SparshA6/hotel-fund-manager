@@ -1647,7 +1647,7 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Dynamic OTA Commission Calculation Display Label
-                if (platform != "Direct") {
+                if (platform != "Direct" && !isBlockedMode) {
                     item {
                         val discountVal = discountStr.toDoubleOrNull() ?: 0.0
                         val commBase = (totalBillValue - discountVal).coerceAtLeast(0.0)
@@ -1793,33 +1793,35 @@ fun AddUnassignedBookingDialog(
                 }
 
                 // Discount and Extra Price fields
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (platform == "Direct") {
+                if (!isBlockedMode) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (platform == "Direct") {
+                                OutlinedTextField(
+                                    value = discountStr,
+                                    onValueChange = { discountStr = it },
+                                    label = { Text("Discount (₹)") },
+                                    placeholder = { Text("0") },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    singleLine = true
+                                )
+                            }
                             OutlinedTextField(
-                                value = discountStr,
-                                onValueChange = { discountStr = it },
-                                label = { Text("Discount (₹)") },
+                                value = extraPriceStr,
+                                onValueChange = { extraPriceStr = it },
+                                label = { Text("Extra Charge (₹)") },
                                 placeholder = { Text("0") },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(if (platform == "Direct") 1f else 2f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 shape = RoundedCornerShape(10.dp),
                                 singleLine = true
                             )
                         }
-                        OutlinedTextField(
-                            value = extraPriceStr,
-                            onValueChange = { extraPriceStr = it },
-                            label = { Text("Extra Charge (₹)") },
-                            placeholder = { Text("0") },
-                            modifier = Modifier.weight(if (platform == "Direct") 1f else 2f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            singleLine = true
-                        )
                     }
                 }
 

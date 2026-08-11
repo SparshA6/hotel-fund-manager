@@ -2106,66 +2106,68 @@ fun QuickBookDialog(
                 }
 
                 // Custom Bill or Base Rate
-                                                item {
-                                                    if (platform == "Direct") {
-                                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Column(modifier = Modifier.weight(1f)) {
-                                                                    Text("Custom Bill Total", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                                    val hasBoth = dialogRoomItems.any { it.category == "Room" } && dialogRoomItems.any { it.category == "Dorm" }
-                                                                    val descText = if (hasBoth) "Different from sum of room & bed rates" else if (isDormMode) "Different from sum of bed rates" else "Different from sum of room rates"
-                                                                    Text(descText, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                                                }
-                                                                Switch(checked = isBillOn, onCheckedChange = { isBillOn = it })
-                                                            }
-                                                                                                               if (isBillOn) {
-                                                                Spacer(modifier = Modifier.height(6.dp))
-                                                                OutlinedTextField(
-                                                                    value = billAmountStr,
-                                                                    onValueChange = { 
-                                                                        billAmountStr = it 
-                                                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
-                                                                    },
-                                                                    isError = customBillError != null,
-                                                                    supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                                                    label = { Text("Custom Bill Amount") },
-                                                                    placeholder = { Text("e.g. 2800") },
-                                                                    prefix = { Text("₹ ") },
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    singleLine = true,
-                                                                    shape = RoundedCornerShape(10.dp),
-                                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                                                )
-                                                            }
-                                                        }
-                                                    } else {
-                                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                                            OutlinedTextField(
-                                                                value = billAmountStr,
-                                                                onValueChange = { 
-                                                                    billAmountStr = it 
-                                                                    if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
-                                                                },
-                                                                isError = customBillError != null,
-                                                                supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                                                label = { Text("Payable to Hotel") },
-                                                                placeholder = { Text("Enter final price payable to hotel") },
-                                                                prefix = { Text("₹ ") },
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                singleLine = true,
-                                                                shape = RoundedCornerShape(10.dp),
-                                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                                            )
-                                                        }
-                                                    }
-                                                }
+                if (!isBlockedMode) {
+                    item {
+                        if (platform == "Direct") {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Custom Bill Total", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val hasBoth = dialogRoomItems.any { it.category == "Room" } && dialogRoomItems.any { it.category == "Dorm" }
+                                        val descText = if (hasBoth) "Different from sum of room & bed rates" else if (isDormMode) "Different from sum of bed rates" else "Different from sum of room rates"
+                                        Text(descText, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                    }
+                                    Switch(checked = isBillOn, onCheckedChange = { isBillOn = it })
+                                }
+                                if (isBillOn) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = billAmountStr,
+                                        onValueChange = { 
+                                            billAmountStr = it 
+                                            if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
+                                        },
+                                        isError = customBillError != null,
+                                        supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                        label = { Text("Custom Bill Amount") },
+                                        placeholder = { Text("e.g. 2800") },
+                                        prefix = { Text("₹ ") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(10.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(
+                                    value = billAmountStr,
+                                    onValueChange = { 
+                                        billAmountStr = it 
+                                        if ((it.toDoubleOrNull() ?: 0.0) > 0.0) customBillError = null
+                                    },
+                                    isError = customBillError != null,
+                                    supportingText = customBillError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                                    label = { Text("Payable to Hotel") },
+                                    placeholder = { Text("Enter final price payable to hotel") },
+                                    prefix = { Text("₹ ") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                            }
+                        }
+                    }
+                }
                                 
                                 // Dynamic OTA Commission Calculation Display Label
-                                if (platform != "Direct") {
+                                if (platform != "Direct" && !isBlockedMode) {
                                     item {
                                         val userPayable = billAmountStr.toDoubleOrNull() ?: 0.0
                                         val portalSettings = bookingRepository.getPortalSettingsForPlatform(platform)
@@ -2312,33 +2314,35 @@ fun QuickBookDialog(
                                 }
 
                 // Discount and Extra Price fields
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (platform == "Direct") {
+                if (!isBlockedMode) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (platform == "Direct") {
+                                OutlinedTextField(
+                                    value = discountStr,
+                                    onValueChange = { discountStr = it },
+                                    label = { Text("Discount (₹)") },
+                                    placeholder = { Text("0") },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(10.dp),
+                                    singleLine = true
+                                )
+                            }
                             OutlinedTextField(
-                                value = discountStr,
-                                onValueChange = { discountStr = it },
-                                label = { Text("Discount (₹)") },
+                                value = extraPriceStr,
+                                onValueChange = { extraPriceStr = it },
+                                label = { Text("Extra Charge (₹)") },
                                 placeholder = { Text("0") },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(if (platform == "Direct") 1f else 2f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 shape = RoundedCornerShape(10.dp),
                                 singleLine = true
                             )
                         }
-                        OutlinedTextField(
-                            value = extraPriceStr,
-                            onValueChange = { extraPriceStr = it },
-                            label = { Text("Extra Charge (₹)") },
-                            placeholder = { Text("0") },
-                            modifier = Modifier.weight(if (platform == "Direct") 1f else 2f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(10.dp),
-                            singleLine = true
-                        )
                     }
                 }
 
