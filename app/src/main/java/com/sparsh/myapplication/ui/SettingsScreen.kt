@@ -13,6 +13,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -60,6 +63,17 @@ fun SettingsScreen(
     val platforms = listOf("MMT", "Goibibo", "Yatra", "Booking.com", "Agoda", "Cleartrip")
     var selectedPlatform by remember { mutableStateOf("MMT") }
     var portalSettingsList by remember { mutableStateOf(bookingRepository.getLocalPortalSettings()) }
+
+    val formatBackupDate = remember {
+        { timestamp: Long, fallback: String ->
+            try {
+                if (timestamp == 0L) fallback
+                else SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US).format(Date(timestamp))
+            } catch (e: Exception) {
+                fallback
+            }
+        }
+    }
 
     var emailAddressStr by remember { mutableStateOf("hotelorangeclassic@gmail.com") }
     var appPasswordStr by remember { mutableStateOf("woar uums ramq dkku") }
@@ -799,7 +813,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showRestoreConfirmDialog = null },
             title = { Text("Restore Backup?") },
-            text = { Text("Are you sure you want to restore the backup from ${backup.displayDate}? This will completely replace the current live database and local cache bookings with the ${backup.bookingCount} bookings in this backup.") },
+            text = { Text("Are you sure you want to restore the backup from ${formatBackupDate(backup.timestamp, backup.displayDate)}? This will completely replace the current live database and local cache bookings with the ${backup.bookingCount} bookings in this backup.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -839,7 +853,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = null },
             title = { Text("Delete Backup?") },
-            text = { Text("Are you sure you want to delete this backup from ${backup.displayDate}? This action is permanent and cannot be undone.") },
+            text = { Text("Are you sure you want to delete this backup from ${formatBackupDate(backup.timestamp, backup.displayDate)}? This action is permanent and cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -950,7 +964,7 @@ fun SettingsScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = backup.displayDate,
+                                            text = formatBackupDate(backup.timestamp, backup.displayDate),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp
                                         )
