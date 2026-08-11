@@ -572,87 +572,6 @@ fun DashboardScreen(
                     }
                 }
 
-                // Platform-wise Breakdown
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp)
-                        ) {
-                            Text(
-                                text = "Platform Distribution",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            platforms.forEach { platform ->
-                                val count = platformCounts[platform] ?: 0
-                                val revenue = platformRevenues[platform] ?: 0.0
-                                val fraction = (revenue / maxPlatformRevenue).toFloat().coerceIn(0f, 1f)
-
-                                val platformColor = when (platform) {
-                                    "Direct" -> Color(0xFF10B981) // Emerald Green
-                                    "MMT" -> Color(0xFFF97316) // Orange
-                                    "Booking.com" -> Color(0xFF2563EB) // Royal Blue
-                                    "Agoda" -> Color(0xFF8B5CF6) // Purple
-                                    "Goibibo" -> Color(0xFFEF4444) // Red
-                                    "Yatra" -> Color(0xFFE11D48) // Crimson Red
-                                    "Cleartrip" -> Color(0xFFF59E0B) // Amber
-                                    else -> MaterialTheme.colorScheme.secondary
-                                }
-
-                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = platform,
-                                            fontWeight = FontWeight.Medium,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        Text(
-                                            text = "$count bkgs • ${currencyFormatter.format(revenue)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    // Custom visual bar
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(10.dp)
-                                            .background(
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-                                                shape = RoundedCornerShape(5.dp)
-                                            )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth(fraction)
-                                                .fillMaxHeight()
-                                                .background(
-                                                    platformColor,
-                                                    shape = RoundedCornerShape(5.dp)
-                                                )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Account Summary Breakdown Card
                 item {
                     Card(
@@ -777,6 +696,87 @@ fun DashboardScreen(
                                                     )
                                             )
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Platform-wise Breakdown
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp)
+                        ) {
+                            Text(
+                                text = "Platform Distribution",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            platforms.forEach { platform ->
+                                val count = platformCounts[platform] ?: 0
+                                val revenue = platformRevenues[platform] ?: 0.0
+                                val fraction = (revenue / maxPlatformRevenue).toFloat().coerceIn(0f, 1f)
+
+                                val platformColor = when (platform) {
+                                    "Direct" -> Color(0xFF10B981) // Emerald Green
+                                    "MMT" -> Color(0xFFF97316) // Orange
+                                    "Booking.com" -> Color(0xFF2563EB) // Royal Blue
+                                    "Agoda" -> Color(0xFF8B5CF6) // Purple
+                                    "Goibibo" -> Color(0xFFEF4444) // Red
+                                    "Yatra" -> Color(0xFFE11D48) // Crimson Red
+                                    "Cleartrip" -> Color(0xFFF59E0B) // Amber
+                                    else -> MaterialTheme.colorScheme.secondary
+                                }
+
+                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = platform,
+                                            fontWeight = FontWeight.Medium,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            text = "$count bkgs • ${currencyFormatter.format(revenue)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    // Custom visual bar
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(10.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                                                shape = RoundedCornerShape(5.dp)
+                                            )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(fraction)
+                                                .fillMaxHeight()
+                                                .background(
+                                                    platformColor,
+                                                    shape = RoundedCornerShape(5.dp)
+                                                )
+                                        )
                                     }
                                 }
                             }
