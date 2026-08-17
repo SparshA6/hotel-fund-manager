@@ -12,8 +12,8 @@ android {
         applicationId = "com.sparsh.myapplication"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,6 +42,7 @@ android {
 dependencies {
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

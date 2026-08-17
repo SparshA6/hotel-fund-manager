@@ -20,11 +20,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import com.sparsh.myapplication.SettingsManager
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: (isStaff: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
+    val fragmentActivity = context as? FragmentActivity
     var selectedRole by remember { mutableStateOf<String?>(null) } // "admin" or "staff"
     var pinCode by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
@@ -173,6 +179,33 @@ fun LoginScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
+                            if (SettingsManager.isBiometricLoginEnabled(context)) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        fragmentActivity?.let { activity ->
+                                            BiometricHelper.promptBiometric(
+                                                activity = activity,
+                                                title = "Face ID & Biometric Admin Login",
+                                                subtitle = "Use Face ID, Fingerprint, or PIN to unlock Admin Mode",
+                                                onSuccess = { onLoginSuccess(false) }
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Text("Unlock with Face ID / Biometrics", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -193,7 +226,8 @@ fun LoginScreen(
 
                                 Button(
                                     onClick = {
-                                        if (pinCode == "1234") {
+                                        val expectedPin = SettingsManager.getAdminPin(context)
+                                        if (pinCode == expectedPin) {
                                             onLoginSuccess(false)
                                         } else {
                                             pinError = "Incorrect Admin PIN."

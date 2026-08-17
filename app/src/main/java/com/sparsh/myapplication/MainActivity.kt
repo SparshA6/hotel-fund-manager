@@ -1,7 +1,7 @@
 package com.sparsh.myapplication
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -34,15 +34,13 @@ import com.sparsh.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private lateinit var bookingRepository: BookingRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         bookingRepository = BookingRepository(this)
-        
-        // Seeding disabled to start with a completely fresh, empty list of real bookings
-        // seedMockDataIfNeeded()
+        updateScreenProtection()
 
         enableEdgeToEdge()
         setContent {
@@ -494,6 +492,23 @@ class MainActivity : ComponentActivity() {
             bookingRepository.saveBooking(mock3)
             bookingRepository.saveBooking(mock4)
             prefs.edit().putBoolean("is_seeded", true).apply()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateScreenProtection()
+    }
+
+    fun updateScreenProtection() {
+        val isProtected = SettingsManager.isScreenProtectionEnabled(this)
+        if (isProtected) {
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                android.view.WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 }

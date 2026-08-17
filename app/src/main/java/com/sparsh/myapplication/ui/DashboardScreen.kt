@@ -42,6 +42,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Lock
+import androidx.fragment.app.FragmentActivity
+import com.sparsh.myapplication.SettingsManager
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,6 +91,55 @@ fun DashboardScreen(
 
     var selectedPeriod by remember { mutableStateOf(ReportPeriod.TODAY) }
     var calendarOffset by remember(selectedPeriod) { mutableStateOf(0) }
+
+    val fragmentActivity = context as? FragmentActivity
+    val sharedPrefs = remember(context) { context.getSharedPreferences("hotel_fund_prefs", android.content.Context.MODE_PRIVATE) }
+    val isStaffUser = remember(sharedPrefs) { sharedPrefs.getBoolean("is_staff_mode", false) }
+    val currentUserRole = if (isStaffUser) "staff" else "admin"
+
+    var isNetIncomeRevealed by remember { mutableStateOf(false) }
+    val isBiometricEnabled = remember(currentUserRole, selectedPeriod) {
+        SettingsManager.isBiometricNetIncomeEnabled(context, currentUserRole)
+    }
+
+    // Only MONTHLY and YEARLY require biometrics when enabled. TODAY is never locked.
+    val isNetIncomeLocked = remember(selectedPeriod, isBiometricEnabled, isNetIncomeRevealed) {
+        if (selectedPeriod == ReportPeriod.TODAY) {
+            false
+        } else {
+            isBiometricEnabled && !isNetIncomeRevealed
+        }
+    }
+
+    fun requestBiometricUnlock() {
+        if (fragmentActivity != null) {
+            BiometricHelper.promptBiometric(
+                activity = fragmentActivity,
+                title = "Face ID & Biometric Security",
+                subtitle = "Authenticate with Face ID, Fingerprint, or PIN to reveal ${if (selectedPeriod == ReportPeriod.MONTHLY) "Monthly" else "Yearly"} Net Income stats",
+                onSuccess = {
+                    isNetIncomeRevealed = true
+                }
+            )
+        } else {
+            isNetIncomeRevealed = true
+        }
+    }
+
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                if (SettingsManager.isAutoLockOnBackgroundEnabled(context)) {
+                    isNetIncomeRevealed = false
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     if (pullToRefreshState.isRefreshing) {
         LaunchedEffect(true) {
@@ -433,7 +485,13 @@ fun DashboardScreen(
                 // Main Fund Card
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isNetIncomeLocked) {
+                                    Modifier.clickable { requestBiometricUnlock() }
+                                } else Modifier
+                            ),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primary
@@ -444,25 +502,85 @@ fun DashboardScreen(
                                 .fillMaxWidth()
                                 .padding(24.dp)
                         ) {
-                            val periodTitle = when (selectedPeriod) {
-                                ReportPeriod.TODAY -> "Today's Net Income"
-                                ReportPeriod.MONTHLY -> "Monthly Net Income"
-                                ReportPeriod.YEARLY -> "Yearly Net Income"
-                            }
-                            Text(
-                                text = periodTitle,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = currencyFormatter.format(periodNet),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.5).sp
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val periodTitle = when (selectedPeriod) {
+                                    ReportPeriod.TODAY -> "Today's Net Income"
+                                    ReportPeriod.MONTHLY -> "Monthly Net Income"
+                                    ReportPeriod.YEARLY -> "Yearly Net Income"
+                                }
+                                Text(
+                                    text = periodTitle,
+                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.titleMedium
                                 )
-                            )
+
+                                if (isBiometricEnabled && selectedPeriod != ReportPeriod.TODAY) {
+                                    IconButton(
+                                        onClick = {
+                                            if (isNetIncomeLocked) {
+                                                requestBiometricUnlock()
+                                            } else {
+                                                isNetIncomeRevealed = false
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Lock,
+                                            contentDescription = if (isNetIncomeLocked) "Unlock Stats" else "Lock Stats",
+                                            tint = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            if (isNetIncomeLocked) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = "₹ ••••••••",
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        style = MaterialTheme.typography.headlineLarge.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.5).sp
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    FilledTonalButton(
+                                        onClick = { requestBiometricUnlock() },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Text("Tap to Reveal (Face ID / Biometric Lock)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = currencyFormatter.format(periodNet),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = (-0.5).sp
+                                    )
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(20.dp))
                             HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f))
                             Spacer(modifier = Modifier.height(16.dp))
@@ -478,7 +596,7 @@ fun DashboardScreen(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        text = currencyFormatter.format(periodGross),
+                                        text = if (isNetIncomeLocked) "₹ ••••••••" else currencyFormatter.format(periodGross),
                                         color = MaterialTheme.colorScheme.onPrimary,
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyLarge
@@ -491,7 +609,7 @@ fun DashboardScreen(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        text = currencyFormatter.format(periodExpense),
+                                        text = if (isNetIncomeLocked) "₹ ••••••••" else currencyFormatter.format(periodExpense),
                                         color = Color(0xFFFFCC80), // Warm amber
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyLarge
@@ -609,7 +727,7 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                                 ) {
                                     Text(
-                                        text = currencyFormatter.format(totalAccountPaymentsAmount),
+                                        text = if (isNetIncomeLocked) "₹ ••••••••" else currencyFormatter.format(totalAccountPaymentsAmount),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -673,7 +791,7 @@ fun DashboardScreen(
                                                 )
                                             }
                                             Text(
-                                                text = "${item.count} pmt${if (item.count > 1) "s" else ""} • ${currencyFormatter.format(item.amount)}",
+                                                text = if (isNetIncomeLocked) "${item.count} pmt${if (item.count > 1) "s" else ""} • ₹ ••••••••" else "${item.count} pmt${if (item.count > 1) "s" else ""} • ${currencyFormatter.format(item.amount)}",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -755,7 +873,7 @@ fun DashboardScreen(
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                         Text(
-                                            text = "$count bkgs • ${currencyFormatter.format(revenue)}",
+                                            text = if (isNetIncomeLocked) "$count bkgs • ₹ ••••••••" else "$count bkgs • ${currencyFormatter.format(revenue)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                         )
@@ -895,7 +1013,7 @@ fun DashboardScreen(
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Text(
-                                                text = currencyFormatter.format(payment.amount),
+                                                text = if (isNetIncomeLocked) "₹ ••••••••" else currencyFormatter.format(payment.amount),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 14.sp,
                                                 color = Color(0xFF10B981)

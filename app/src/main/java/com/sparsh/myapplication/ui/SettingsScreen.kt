@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -85,6 +86,18 @@ fun SettingsScreen(
     var showRawEmailDialog by remember { mutableStateOf(false) }
     var rawEmailSubject by remember { mutableStateOf("") }
     var rawEmailBody by remember { mutableStateOf("") }
+
+    var biometricAdminEnabled by remember { mutableStateOf(SettingsManager.isBiometricNetIncomeEnabled(context, "admin")) }
+    var biometricStaffEnabled by remember { mutableStateOf(SettingsManager.isBiometricNetIncomeEnabled(context, "staff")) }
+    var screenProtectionEnabled by remember { mutableStateOf(SettingsManager.isScreenProtectionEnabled(context)) }
+    var autoLockBackgroundEnabled by remember { mutableStateOf(SettingsManager.isAutoLockOnBackgroundEnabled(context)) }
+    var biometricLoginEnabled by remember { mutableStateOf(SettingsManager.isBiometricLoginEnabled(context)) }
+
+    var showChangePinDialog by remember { mutableStateOf(false) }
+    var currentPinInput by remember { mutableStateOf("") }
+    var newPinInput by remember { mutableStateOf("") }
+    var confirmPinInput by remember { mutableStateOf("") }
+    var changePinError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         isLoadingBackups = true
@@ -286,6 +299,211 @@ fun SettingsScreen(
                                 text = "Log Out Account",
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+                    }
+                }
+            }
+
+            // Biometric & Security Options Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Biometric Lock",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Biometric & Net Income Privacy",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Text(
+                            text = "Require biometric authentication (fingerprint, face, or PIN) to reveal Monthly and Yearly Net Income stats. Today's stats remain visible at all times.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        if (!isStaffMode) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Biometric Lock for Admin User",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = if (biometricAdminEnabled) "Enabled (Default: On)" else "Disabled (Default: On)",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = biometricAdminEnabled,
+                                    onCheckedChange = { isChecked ->
+                                        biometricAdminEnabled = isChecked
+                                        SettingsManager.setBiometricNetIncomeEnabled(context, "admin", isChecked)
+                                        Toast.makeText(context, "Admin Biometric Lock ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Biometric Lock for Staff User",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = if (biometricStaffEnabled) "Enabled (Default: On)" else "Disabled (Default: On)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = biometricStaffEnabled,
+                                onCheckedChange = { isChecked ->
+                                    biometricStaffEnabled = isChecked
+                                    SettingsManager.setBiometricNetIncomeEnabled(context, "staff", isChecked)
+                                    Toast.makeText(context, "Staff Biometric Lock ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        // Biometric Admin Login Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Biometric Login for Admin",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Allow unlocking Admin mode with fingerprint/face ID",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = biometricLoginEnabled,
+                                onCheckedChange = { isChecked ->
+                                    biometricLoginEnabled = isChecked
+                                    SettingsManager.setBiometricLoginEnabled(context, isChecked)
+                                    Toast.makeText(context, "Biometric Admin Login ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        // Background Auto-Lock Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-Lock Stats on Background",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Re-lock Net Income stats whenever app is minimized",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = autoLockBackgroundEnabled,
+                                onCheckedChange = { isChecked ->
+                                    autoLockBackgroundEnabled = isChecked
+                                    SettingsManager.setAutoLockOnBackgroundEnabled(context, isChecked)
+                                    Toast.makeText(context, "Auto-Lock ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        // Screenshot & Recents Protection Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Screenshot & Recording Protection",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Block screenshots & previews in recent apps screen (FLAG_SECURE)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = screenProtectionEnabled,
+                                onCheckedChange = { isChecked ->
+                                    screenProtectionEnabled = isChecked
+                                    SettingsManager.setScreenProtectionEnabled(context, isChecked)
+                                    (context as? com.sparsh.myapplication.MainActivity)?.updateScreenProtection()
+                                    Toast.makeText(context, "Screenshot Protection ${if (isChecked) "Enabled" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+
+                        if (!isStaffMode) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            
+                            OutlinedButton(
+                                onClick = {
+                                    currentPinInput = ""
+                                    newPinInput = ""
+                                    confirmPinInput = ""
+                                    changePinError = null
+                                    showChangePinDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Change Admin PIN", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1086,6 +1304,98 @@ fun SettingsScreen(
                     }
                 ) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showChangePinDialog) {
+        AlertDialog(
+            onDismissRequest = { showChangePinDialog = false },
+            title = { Text("Change Admin PIN", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = currentPinInput,
+                        onValueChange = {
+                            if (it.length <= 4) {
+                                currentPinInput = it
+                                changePinError = null
+                            }
+                        },
+                        label = { Text("Current Admin PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = newPinInput,
+                        onValueChange = {
+                            if (it.length <= 4) {
+                                newPinInput = it
+                                changePinError = null
+                            }
+                        },
+                        label = { Text("New 4-Digit PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = {
+                            if (it.length <= 4) {
+                                confirmPinInput = it
+                                changePinError = null
+                            }
+                        },
+                        label = { Text("Confirm New PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (changePinError != null) {
+                        Text(
+                            text = changePinError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val expectedPin = SettingsManager.getAdminPin(context)
+                        if (currentPinInput != expectedPin) {
+                            changePinError = "Current PIN is incorrect."
+                        } else if (newPinInput.length != 4) {
+                            changePinError = "New PIN must be 4 digits."
+                        } else if (newPinInput != confirmPinInput) {
+                            changePinError = "New PINs do not match."
+                        } else {
+                            SettingsManager.setAdminPin(context, newPinInput)
+                            Toast.makeText(context, "Admin PIN changed successfully!", Toast.LENGTH_SHORT).show()
+                            showChangePinDialog = false
+                        }
+                    }
+                ) {
+                    Text("Save PIN")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChangePinDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )

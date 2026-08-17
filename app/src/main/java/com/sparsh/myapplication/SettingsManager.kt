@@ -89,6 +89,48 @@ object SettingsManager {
         getPrefs(context).edit().putFloat(key, value).apply()
     }
 
+    fun isBiometricNetIncomeEnabled(context: Context, userRole: String): Boolean {
+        val key = "biometric_net_income_${userRole.lowercase()}"
+        return getPrefs(context).getBoolean(key, true)
+    }
+
+    fun setBiometricNetIncomeEnabled(context: Context, userRole: String, enabled: Boolean) {
+        val key = "biometric_net_income_${userRole.lowercase()}"
+        getPrefs(context).edit().putBoolean(key, enabled).apply()
+    }
+
+    fun getAdminPin(context: Context): String {
+        return getPrefs(context).getString("admin_pin", "1234") ?: "1234"
+    }
+
+    fun setAdminPin(context: Context, newPin: String) {
+        getPrefs(context).edit().putString("admin_pin", newPin).apply()
+    }
+
+    fun isScreenProtectionEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean("screen_protection_enabled", false)
+    }
+
+    fun setScreenProtectionEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean("screen_protection_enabled", enabled).apply()
+    }
+
+    fun isAutoLockOnBackgroundEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean("auto_lock_on_background", true)
+    }
+
+    fun setAutoLockOnBackgroundEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean("auto_lock_on_background", enabled).apply()
+    }
+
+    fun isBiometricLoginEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean("biometric_login_enabled", true)
+    }
+
+    fun setBiometricLoginEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean("biometric_login_enabled", enabled).apply()
+    }
+
     fun calculateBreakdown(context: Context, platform: String, guestAmount: Double): DeductionBreakdown {
         if (platform.equals("Direct", ignoreCase = true)) {
             return DeductionBreakdown(
