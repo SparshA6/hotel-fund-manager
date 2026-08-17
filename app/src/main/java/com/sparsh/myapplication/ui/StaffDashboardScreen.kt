@@ -63,7 +63,7 @@ fun StaffDashboardScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Staff Desk Dashboard",
+                            text = "Orange Classic - Staff Desk",
                             fontWeight = FontWeight.Bold,
                             fontSize = 22.sp
                         )

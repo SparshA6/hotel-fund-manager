@@ -20,6 +20,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import com.sparsh.myapplication.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import com.sparsh.myapplication.SettingsManager
@@ -62,10 +66,18 @@ fun LoginScreen(
             ) {
                 // App Branding / Welcome Title
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painter = painterResource(id = R.drawable.orange_classic_logo),
+                        contentDescription = "Orange Classic Logo",
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Hotel Fund Manager",
+                        text = "Orange Classic",
                         fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary,
                         textAlign = TextAlign.Center
                     )
