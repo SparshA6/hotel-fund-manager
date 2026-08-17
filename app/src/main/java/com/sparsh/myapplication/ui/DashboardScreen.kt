@@ -1056,81 +1056,83 @@ fun DashboardScreen(
                     }
                 }
 
-                // Recent Bookings Header
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Bookings in Period",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Total: ${activeBookings.size}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                // Booking Empty State or Feed
-                if (activeBookings.isEmpty()) {
+                // Recent Bookings Header & List (Daily / TODAY option only)
+                if (selectedPeriod == ReportPeriod.TODAY) {
                     item {
-                        Card(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-                            )
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "No active bookings in this period",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Use the arrows above to browse other dates or add new check-ins.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                            Text(
+                                text = "Bookings in Period",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Total: ${activeBookings.size}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
                         }
                     }
-                } else {
-                    items(activeBookings, key = { it.id }) { booking ->
-                        BookingItem(
-                            booking = booking,
-                            currencyFormatter = currencyFormatter,
-                            onEdit = { onEditBooking(booking) },
-                            onDelete = { deleteIds -> onDeleteBooking(booking.id, deleteIds) },
-                            onAssignClick = if (!booking.isAssigned) {
-                                { selectedBookingForAssignment = booking }
-                            } else null
-                        )
+
+                    // Booking Empty State or Feed
+                    if (activeBookings.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "No active bookings in this period",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Use the arrows above to browse other dates or add new check-ins.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(activeBookings, key = { it.id }) { booking ->
+                            BookingItem(
+                                booking = booking,
+                                currencyFormatter = currencyFormatter,
+                                onEdit = { onEditBooking(booking) },
+                                onDelete = { deleteIds -> onDeleteBooking(booking.id, deleteIds) },
+                                onAssignClick = if (!booking.isAssigned) {
+                                    { selectedBookingForAssignment = booking }
+                                } else null
+                            )
+                        }
                     }
                 }
             }
