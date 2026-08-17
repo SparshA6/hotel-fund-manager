@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sparsh.myapplication"
+        applicationId = "com.orangeclassic.app"
         minSdk = 24
         targetSdk = 35
         versionCode = 8
